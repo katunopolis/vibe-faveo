@@ -46,8 +46,11 @@ RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader --no-scripts
+# Install PHP dependencies with scripts
+RUN composer install --no-dev --optimize-autoloader
+
+# Copy .env.example to .env
+RUN cp .env.example .env
 
 # Generate application key
 RUN php artisan key:generate --force
