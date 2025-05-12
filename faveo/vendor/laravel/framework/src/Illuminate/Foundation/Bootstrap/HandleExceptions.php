@@ -7,7 +7,9 @@ use Exception;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Contracts\Foundation\Application;
 use Illuminate\Log\LogManager;
+use Monolog\Formatter\JsonFormatter;
 use Monolog\Handler\NullHandler;
+use Monolog\Handler\SocketHandler;
 use Symfony\Component\Console\Output\ConsoleOutput;
 use Symfony\Component\ErrorHandler\Error\FatalError;
 use Throwable;
@@ -197,11 +199,15 @@ class HandleExceptions
         try {
             $this->getExceptionHandler()->report($e);
         } catch (Exception $e) {
-            //
+            $exceptionHandlerFailed = true;
         }
 
         if (static::$app->runningInConsole()) {
             $this->renderForConsole($e);
+
+            if ($exceptionHandlerFailed ?? false) {
+                exit(1);
+            }
         } else {
             $this->renderHttpResponse($e);
         }

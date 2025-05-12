@@ -33,7 +33,7 @@ RUN a2enmod rewrite
 # Set working directory
 WORKDIR /var/www/html
 
-# Copy app files
+# Copy application files
 COPY . .
 
 # Move Faveo files to the correct location
@@ -42,27 +42,102 @@ RUN mv faveo/* . && rm -rf faveo
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Set permissions for Laravel
+# Set permissions
 RUN chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
 
-# Install PHP dependencies with scripts
-RUN composer install --no-dev --optimize-autoloader
+# Create .env file
+RUN echo "APP_NAME=Faveo\n\
+APP_ENV=local\n\
+APP_KEY=base64:KLt6cSOazff/QVuWn4VNoNyTiJ0W0+HrY3f9rtAJKew=\n\
+APP_DEBUG=true\n\
+APP_URL=http://localhost:8080\n\
+\n\
+LOG_CHANNEL=stack\n\
+LOG_LEVEL=debug\n\
+\n\
+DB_CONNECTION=mysql\n\
+DB_HOST=db\n\
+DB_PORT=3306\n\
+DB_DATABASE=faveo\n\
+DB_USERNAME=faveo\n\
+DB_PASSWORD=faveo_password\n\
+\n\
+BROADCAST_DRIVER=log\n\
+CACHE_DRIVER=file\n\
+FILESYSTEM_DISK=local\n\
+QUEUE_CONNECTION=sync\n\
+SESSION_DRIVER=file\n\
+SESSION_LIFETIME=120\n\
+\n\
+MAIL_MAILER=smtp\n\
+MAIL_HOST=mailpit\n\
+MAIL_PORT=1025\n\
+MAIL_USERNAME=null\n\
+MAIL_PASSWORD=null\n\
+MAIL_ENCRYPTION=null\n\
+MAIL_FROM_ADDRESS=\"hello@example.com\"\n\
+MAIL_FROM_NAME=\"\${APP_NAME}\"\n\
+\n\
+FCM_SERVER_KEY=\n\
+FCM_SENDER_ID=" > .env
 
-# Copy .env.example to .env
-RUN cp .env.example .env
+# Create bootstrap script
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+echo "Running Composer..."\n\
+composer clearcache\n\
+composer install --no-scripts --no-autoloader || true\n\
+composer dump-autoload --optimize --no-scripts || true\n\
+\n\
+echo "Creating necessary directories..."\n\
+mkdir -p /var/www/html/storage/framework/cache/data\n\
+mkdir -p /var/www/html/storage/framework/sessions\n\
+mkdir -p /var/www/html/storage/framework/views\n\
+mkdir -p /var/www/html/storage/app/public\n\
+\n\
+echo "Setting permissions..."\n\
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache\n\
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache\n\
+\n\
+echo "Setting up Laravel..."\n\
+# Make sure the .env file exists and has a key\n\
+if [ ! -f /var/www/html/.env ]; then\n\
+  echo "Creating .env file..."\n\
+  cp /var/www/html/.env.example /var/www/html/.env || true\n\
+fi\n\
+\n\
+# Ensure we have a key in the .env file\n\
+if ! grep -q "^APP_KEY=" /var/www/html/.env || grep -q "^APP_KEY=$" /var/www/html/.env; then\n\
+  echo "APP_KEY=base64:KLt6cSOazff/QVuWn4VNoNyTiJ0W0+HrY3f9rtAJKew=" >> /var/www/html/.env\n\
+fi\n\
+\n\
+# Try clearing caches with simple commands\n\
+echo "Clearing Laravel caches..."\n\
+php -r "if (file_exists(\"bootstrap/cache/config.php\")) @unlink(\"bootstrap/cache/config.php\");" || true\n\
+php -r "if (file_exists(\"bootstrap/cache/routes.php\")) @unlink(\"bootstrap/cache/routes.php\");" || true\n\
+php -r "array_map(\"unlink\", glob(\"storage/framework/views/*.php\"));" || true\n\
+\n\
+# Set database config directly if needed\n\
+sed -i "s/DB_HOST=.*/DB_HOST=db/" /var/www/html/.env || true\n\
+sed -i "s/DB_DATABASE=.*/DB_DATABASE=faveo/" /var/www/html/.env || true\n\
+sed -i "s/DB_USERNAME=.*/DB_USERNAME=faveo/" /var/www/html/.env || true\n\
+sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=faveo_password/" /var/www/html/.env || true\n\
+\n\
+echo "Starting Apache..."\n\
+apache2-foreground\n\
+' > /usr/local/bin/bootstrap.sh && \
+    chmod +x /usr/local/bin/bootstrap.sh
 
-# Generate application key
-RUN php artisan key:generate --force
-
-# Run package discovery
-RUN php artisan package:discover --force
-
-# Install Node dependencies and build assets
-RUN npm install && npm run prod
+# Install Node dependencies
+RUN npm install && npm run prod || true
 
 # Set final permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Expose port 80
-EXPOSE 80 
+EXPOSE 80
+
+# Use bootstrap script as entry point
+CMD ["/usr/local/bin/bootstrap.sh"] 
