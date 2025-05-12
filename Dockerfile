@@ -21,6 +21,9 @@ WORKDIR /var/www/html
 # Copy app files
 COPY . .
 
+# Move Faveo files to the correct location
+RUN mv faveo/* . && rm -rf faveo
+
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
