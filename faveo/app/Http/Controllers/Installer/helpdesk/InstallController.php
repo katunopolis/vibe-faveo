@@ -445,11 +445,11 @@ class InstallController extends Controller
         $ENV['CACHE_DRIVER'] = 'file';
         $ENV['SESSION_DRIVER'] = 'file';
         $ENV['SESSION_COOKIE_NAME'] = 'faveo_'.rand(0, 10000);
-        $ENV['QUEUE_CONNECTION'] = 'sync';
-        $ENV['JWT_TTL'] = 4;
-        $ENV['FCM_SERVER_KEY'] = 'AIzaSyCyx5OFnsRFUmDLTMbPV50ZMDUGSG-bLw4';
-        $ENV['FCM_SENDER_ID'] = '661051343223';
-        $ENV['REDIS_DATABASE'] = '0';
+        $ENV['QUEUE_CONNECTION'] = env('QUEUE_CONNECTION', 'sync');
+        $ENV['JWT_TTL'] = env('JWT_TTL', 4);
+        $ENV['FCM_SERVER_KEY'] = env('FCM_SERVER_KEY', '');
+        $ENV['FCM_SENDER_ID'] = env('FCM_SENDER_ID', '');
+        $ENV['REDIS_DATABASE'] = env('REDIS_DATABASE', '0');
 
         $config = '';
         foreach ($ENV as $key => $val) {
