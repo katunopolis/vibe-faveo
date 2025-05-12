@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+dist
+tests
+.git
+.gitignore
+.env
+.env.*
+.DS_Store
+.idea
+.vscode
+storage/*.key
+storage/*.log
+storage/framework/cache/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/app/geoip.mmdb 
