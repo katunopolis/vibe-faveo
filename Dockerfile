@@ -10,7 +10,22 @@ RUN apt-get update && apt-get install -y \
     libpng-dev \
     libonig-dev \
     libxml2-dev \
-    && docker-php-ext-install pdo_mysql zip gd mbstring exif pcntl bcmath xml
+    libc-client-dev \
+    libkrb5-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install PHP extensions
+RUN docker-php-ext-configure imap --with-kerberos --with-imap-ssl \
+    && docker-php-ext-install \
+    pdo_mysql \
+    zip \
+    gd \
+    mbstring \
+    exif \
+    pcntl \
+    bcmath \
+    xml \
+    imap
 
 # Enable Apache mod_rewrite
 RUN a2enmod rewrite
