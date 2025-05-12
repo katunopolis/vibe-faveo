@@ -42,13 +42,23 @@ RUN mv faveo/* . && rm -rf faveo
 # Install Composer
 RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
+# Set permissions for Laravel
+RUN chown -R www-data:www-data /var/www/html \
+    && chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+
 # Install PHP dependencies
-RUN composer install --no-dev --optimize-autoloader
+RUN composer install --no-dev --optimize-autoloader --no-scripts
+
+# Generate application key
+RUN php artisan key:generate --force
+
+# Run package discovery
+RUN php artisan package:discover --force
 
 # Install Node dependencies and build assets
 RUN npm install && npm run prod
 
-# Set permissions
+# Set final permissions
 RUN chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
 
 # Expose port 80
