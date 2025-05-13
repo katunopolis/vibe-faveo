@@ -1,200 +1,295 @@
 <?php
 /**
- * Direct database configuration script for Laravel on Railway
+ * Direct Database Configuration Helper for Faveo
  * 
- * This script uses PDO to directly connect to the database
- * using environment variables, bypassing hostname resolution issues
+ * This file sets up database configuration directly without relying on Laravel's
+ * configuration system. It's designed to be included before running migrations
+ * or other database operations when the Laravel application cannot be fully bootstrapped.
  */
 
-// Show errors for debugging
-error_reporting(E_ALL);
+// Set error reporting for debugging
 ini_set('display_errors', 1);
+error_reporting(E_ALL);
 
-echo "<h1>Railway Direct Database Configuration</h1>";
+// Show a nice header if accessed directly
+if (php_sapi_name() !== 'cli' && !isset($SKIP_HEADER)) {
+    echo "<html><head><title>Faveo Database Configuration</title>";
+    echo "<style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; max-width: 1000px; margin: 0 auto; }
+        h1, h2 { color: #336699; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow: auto; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .warning { color: orange; font-weight: bold; }
+        table { border-collapse: collapse; width: 100%; }
+        th, td { border: 1px solid #ddd; padding: 8px; }
+        tr:nth-child(even) { background-color: #f2f2f2; }
+    </style>";
+    echo "</head><body>";
+    echo "<h1>Faveo Database Configuration Helper</h1>";
+}
 
-// Get Railway environment variables
-$mysql_host = getenv('MYSQLHOST');
-$mysql_port = getenv('MYSQLPORT');
-$mysql_database = getenv('MYSQLDATABASE');
-$mysql_user = getenv('MYSQLUSER');
-$mysql_password = getenv('MYSQLPASSWORD');
+// Try to detect the best database connection
+function detectBestDatabaseConnection() {
+    $connection = [
+        'driver' => 'mysql',
+        'host' => 'localhost',
+        'port' => '3306',
+        'database' => 'faveo',
+        'username' => 'root',
+        'password' => '',
+        'charset' => 'utf8',
+        'collation' => 'utf8_unicode_ci',
+        'prefix' => '',
+        'strict' => false,
+        'engine' => null,
+        'source' => 'default'
+    ];
+    
+    // 1. Try env variables
+    if (getenv('DB_HOST') && getenv('DB_DATABASE') && getenv('DB_USERNAME')) {
+        $connection['host'] = getenv('DB_HOST');
+        $connection['port'] = getenv('DB_PORT') ?: '3306';
+        $connection['database'] = getenv('DB_DATABASE');
+        $connection['username'] = getenv('DB_USERNAME');
+        $connection['password'] = getenv('DB_PASSWORD') ?: '';
+        $connection['source'] = 'environment variables';
+        return $connection;
+    }
+    
+    // 2. Try Railway environment variables
+    if (getenv('MYSQLHOST') && getenv('MYSQLDATABASE') && getenv('MYSQLUSER')) {
+        $connection['host'] = getenv('MYSQLHOST');
+        $connection['port'] = getenv('MYSQLPORT') ?: '3306';
+        $connection['database'] = getenv('MYSQLDATABASE');
+        $connection['username'] = getenv('MYSQLUSER');
+        $connection['password'] = getenv('MYSQLPASSWORD') ?: '';
+        $connection['source'] = 'Railway environment variables';
+        return $connection;
+    }
+    
+    // 3. Try DATABASE_URL
+    $database_url = getenv('DATABASE_URL');
+    if ($database_url && strpos($database_url, '${{') === false) {
+        try {
+            $parsed = parse_url($database_url);
+            if ($parsed) {
+                $connection['host'] = $parsed['host'] ?? 'localhost';
+                $connection['port'] = $parsed['port'] ?? '3306';
+                $connection['database'] = ltrim($parsed['path'] ?? '', '/');
+                $connection['username'] = $parsed['user'] ?? 'root';
+                $connection['password'] = $parsed['pass'] ?? '';
+                $connection['source'] = 'DATABASE_URL';
+                return $connection;
+            }
+        } catch (Exception $e) {
+            // Continue to next method
+        }
+    }
+    
+    // 4. Try Railway internal hostname
+    try {
+        $dsn = "mysql:host=mysql.railway.internal;port=3306;dbname=railway";
+        $conn = new PDO($dsn, 'root', getenv('MYSQLPASSWORD') ?: '');
+        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        $connection['host'] = 'mysql.railway.internal';
+        $connection['port'] = '3306';
+        $connection['database'] = 'railway';
+        $connection['username'] = 'root';
+        $connection['password'] = getenv('MYSQLPASSWORD') ?: '';
+        $connection['source'] = 'Railway internal hostname';
+        return $connection;
+    } catch (PDOException $e) {
+        // Continue to next method
+    }
+    
+    // 5. Try to find .env file and parse it
+    $env_path = realpath(__DIR__ . '/../.env');
+    if (file_exists($env_path)) {
+        $env_content = file_get_contents($env_path);
+        preg_match('/DB_HOST=([^\n]+)/', $env_content, $host_matches);
+        preg_match('/DB_PORT=([^\n]+)/', $env_content, $port_matches);
+        preg_match('/DB_DATABASE=([^\n]+)/', $env_content, $database_matches);
+        preg_match('/DB_USERNAME=([^\n]+)/', $env_content, $username_matches);
+        preg_match('/DB_PASSWORD=([^\n]+)/', $env_content, $password_matches);
+        
+        if (!empty($host_matches[1]) && !empty($database_matches[1]) && !empty($username_matches[1])) {
+            $connection['host'] = trim($host_matches[1]);
+            $connection['port'] = !empty($port_matches[1]) ? trim($port_matches[1]) : '3306';
+            $connection['database'] = trim($database_matches[1]);
+            $connection['username'] = trim($username_matches[1]);
+            $connection['password'] = !empty($password_matches[1]) ? trim($password_matches[1]) : '';
+            $connection['source'] = '.env file';
+            return $connection;
+        }
+    }
+    
+    return $connection;
+}
 
-echo "<h2>Environment Variables</h2>";
-echo "<p>MYSQLHOST: " . ($mysql_host ?: "Not set") . "</p>";
-echo "<p>MYSQLPORT: " . ($mysql_port ?: "Not set") . "</p>";
-echo "<p>MYSQLDATABASE: " . ($mysql_database ?: "Not set") . "</p>";
-echo "<p>MYSQLUSER: " . ($mysql_user ?: "Not set") . "</p>";
-echo "<p>MYSQLPASSWORD: " . ($mysql_password ? "Set (hidden)" : "Not set") . "</p>";
+// Try to get connection details
+$db_connection = detectBestDatabaseConnection();
 
-// Create direct database configuration without hostname resolution
-// This will be included at the beginning of index.php
-$bootstrap_file = __DIR__ . '/db_bootstrap.php';
-$bootstrap_content = "<?php
-// Direct database configuration for Laravel on Railway
-// This file bypasses hostname resolution by using direct IP configuration
+// Test connection
+$connection_successful = false;
+$connection_error = '';
+
+try {
+    $dsn = "mysql:host={$db_connection['host']};port={$db_connection['port']};dbname={$db_connection['database']}";
+    $pdo = new PDO($dsn, $db_connection['username'], $db_connection['password']);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    $connection_successful = true;
+} catch (PDOException $e) {
+    $connection_error = $e->getMessage();
+}
+
+// Show results if accessed directly
+if (php_sapi_name() !== 'cli' && !isset($SKIP_HEADER)) {
+    echo "<h2>Connection Information</h2>";
+    echo "<table>";
+    echo "<tr><th>Parameter</th><th>Value</th></tr>";
+    echo "<tr><td>Driver</td><td>{$db_connection['driver']}</td></tr>";
+    echo "<tr><td>Host</td><td>{$db_connection['host']}</td></tr>";
+    echo "<tr><td>Port</td><td>{$db_connection['port']}</td></tr>";
+    echo "<tr><td>Database</td><td>{$db_connection['database']}</td></tr>";
+    echo "<tr><td>Username</td><td>{$db_connection['username']}</td></tr>";
+    echo "<tr><td>Password</td><td>" . (empty($db_connection['password']) ? '<em>empty</em>' : '<em>hidden</em>') . "</td></tr>";
+    echo "<tr><td>Source</td><td>{$db_connection['source']}</td></tr>";
+    echo "</table>";
+    
+    echo "<h2>Connection Test</h2>";
+    if ($connection_successful) {
+        echo "<p class='success'>Connection successful!</p>";
+        
+        // Show tables
+        try {
+            $tables = $pdo->query("SHOW TABLES")->fetchAll(PDO::FETCH_COLUMN);
+            echo "<p>Tables found: " . count($tables) . "</p>";
+            if (count($tables) > 0) {
+                echo "<ul>";
+                foreach ($tables as $table) {
+                    echo "<li>$table</li>";
+                }
+                echo "</ul>";
+            }
+        } catch (PDOException $e) {
+            echo "<p class='error'>Error fetching tables: {$e->getMessage()}</p>";
+        }
+    } else {
+        echo "<p class='error'>Connection failed: $connection_error</p>";
+    }
+    
+    echo "<h2>Create Bootstrap File</h2>";
+}
+
+// Generate bootstrap file
+$bootstrap_file_path = __DIR__ . '/db_bootstrap.php';
+$bootstrap_content = <<<EOT
+<?php
+// Direct database configuration for Laravel - auto-generated
 
 // Force database configuration through Laravel Config system
-\$_ENV['DB_CONNECTION'] = 'mysql';
-\$_ENV['DB_HOST'] = '{$mysql_host}';
-\$_ENV['DB_PORT'] = '{$mysql_port}';
-\$_ENV['DB_DATABASE'] = '{$mysql_database}';
-\$_ENV['DB_USERNAME'] = '{$mysql_user}';
-\$_ENV['DB_PASSWORD'] = '{$mysql_password}';
+\$_ENV['DB_CONNECTION'] = '{$db_connection['driver']}';
+\$_ENV['DB_HOST'] = '{$db_connection['host']}';
+\$_ENV['DB_PORT'] = '{$db_connection['port']}';
+\$_ENV['DB_DATABASE'] = '{$db_connection['database']}';
+\$_ENV['DB_USERNAME'] = '{$db_connection['username']}';
+\$_ENV['DB_PASSWORD'] = '{$db_connection['password']}';
 
 // Also set them in environment to be doubly sure
-putenv('DB_CONNECTION=mysql');
-putenv('DB_HOST={$mysql_host}');
-putenv('DB_PORT={$mysql_port}');
-putenv('DB_DATABASE={$mysql_database}');
-putenv('DB_USERNAME={$mysql_user}');
-putenv('DB_PASSWORD={$mysql_password}');
+putenv('DB_CONNECTION={$db_connection['driver']}');
+putenv('DB_HOST={$db_connection['host']}');
+putenv('DB_PORT={$db_connection['port']}');
+putenv('DB_DATABASE={$db_connection['database']}');
+putenv('DB_USERNAME={$db_connection['username']}');
+putenv('DB_PASSWORD={$db_connection['password']}');
 
-// Override Laravel's database configuration directly
-if (!defined('LARAVEL_DATABASE_CONFIG_OVERRIDDEN')) {
-    define('LARAVEL_DATABASE_CONFIG_OVERRIDDEN', true);
-    \$GLOBALS['laravel_database_config'] = [
-        'default' => 'mysql',
-        'connections' => [
-            'mysql' => [
-                'driver' => 'mysql',
-                'url' => '',
-                'host' => '{$mysql_host}',
-                'port' => {$mysql_port},
-                'database' => '{$mysql_database}',
-                'username' => '{$mysql_user}',
-                'password' => '{$mysql_password}',
-                'unix_socket' => '',
-                'charset' => 'utf8mb4',
-                'collation' => 'utf8mb4_unicode_ci',
-                'prefix' => '',
-                'prefix_indexes' => true,
-                'strict' => true,
-                'engine' => null,
-                'options' => extension_loaded('pdo_mysql') ? array_filter([
-                    PDO::MYSQL_ATTR_SSL_CA => '',
-                ]) : [],
-            ],
-        ],
+// Override Laravel Database config directly
+if (!function_exists('config') && !isset(\$SKIP_CONFIG_OVERRIDE)) {
+    \$GLOBALS['db_config_override'] = [
+        'driver' => '{$db_connection['driver']}',
+        'host' => '{$db_connection['host']}',
+        'port' => '{$db_connection['port']}',
+        'database' => '{$db_connection['database']}',
+        'username' => '{$db_connection['username']}',
+        'password' => '{$db_connection['password']}',
+        'charset' => '{$db_connection['charset']}',
+        'collation' => '{$db_connection['collation']}',
+        'prefix' => '{$db_connection['prefix']}',
+        'strict' => {$db_connection['strict'] ? 'true' : 'false'},
+        'engine' => null,
     ];
 }
-";
+EOT;
 
 // Write bootstrap file
-if (file_put_contents($bootstrap_file, $bootstrap_content)) {
-    echo "<p style='color:green'>✓ Created database bootstrap file at {$bootstrap_file}</p>";
-} else {
-    echo "<p style='color:red'>✗ Failed to create bootstrap file</p>";
-}
-
-// Modify index.php to include our bootstrap file
-$index_file = __DIR__ . '/index.php';
-if (file_exists($index_file)) {
-    $original_content = file_get_contents($index_file);
-    $backup_file = $index_file . '.bak';
-    
-    // Back up original
-    if (!file_exists($backup_file)) {
-        file_put_contents($backup_file, $original_content);
-        echo "<p>Created backup of index.php at {$backup_file}</p>";
-    }
-    
-    // Insert our bootstrap include at the top
-    if (strpos($original_content, 'db_bootstrap.php') === false) {
-        $modified_content = preg_replace('/^<\?php/', "<?php\n// Direct database configuration for Railway\nrequire_once __DIR__ . '/db_bootstrap.php';", $original_content);
-        
-        if (file_put_contents($index_file, $modified_content)) {
-            echo "<p style='color:green'>✓ Modified index.php to include database bootstrap</p>";
-        } else {
-            echo "<p style='color:red'>✗ Failed to modify index.php</p>";
-        }
-    } else {
-        echo "<p>Bootstrap already included in index.php</p>";
-    }
-} else {
-    echo "<p style='color:red'>✗ index.php not found</p>";
-}
-
-// Test the database connection
-echo "<h2>Testing Database Connection</h2>";
+$write_success = false;
 try {
-    $dsn = "mysql:host={$mysql_host};port={$mysql_port};dbname={$mysql_database}";
-    echo "<p>DSN: {$dsn}</p>";
-    $conn = new PDO($dsn, $mysql_user, $mysql_password);
-    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    echo "<p style='color:green'>✓ Connection successful!</p>";
-    
-    // Display some database info
-    $stmt = $conn->query("SHOW VARIABLES LIKE 'version'");
-    $version = $stmt->fetch(PDO::FETCH_ASSOC);
-    echo "<p>MySQL version: {$version['Value']}</p>";
-    
-    $stmt = $conn->query("SHOW TABLES");
-    $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
-    echo "<p>Tables found: " . count($tables) . "</p>";
-    if (count($tables) > 0) {
-        echo "<ul>";
-        foreach (array_slice($tables, 0, 10) as $table) {
-            echo "<li>{$table}</li>";
-        }
-        if (count($tables) > 10) {
-            echo "<li>... and " . (count($tables) - 10) . " more</li>";
-        }
-        echo "</ul>";
-    }
-} catch (PDOException $e) {
-    echo "<p style='color:red'>✗ Connection failed: " . $e->getMessage() . "</p>";
+    file_put_contents($bootstrap_file_path, $bootstrap_content);
+    $write_success = true;
+} catch (Exception $e) {
+    $write_error = $e->getMessage();
 }
 
-// Create a config resolver
-echo "<h2>Creating Database Config Resolver</h2>";
-$config_dir = __DIR__ . '/../config';
-if (is_dir($config_dir)) {
-    $db_config_file = $config_dir . '/database.php';
-    $db_config_content = "<?php\nreturn \$GLOBALS['laravel_database_config'] ?? [\n";
-    $db_config_content .= "    'default' => env('DB_CONNECTION', 'mysql'),\n";
-    $db_config_content .= "    'connections' => [\n";
-    $db_config_content .= "        'mysql' => [\n";
-    $db_config_content .= "            'driver' => 'mysql',\n";
-    $db_config_content .= "            'url' => env('
-    DATABASE_URL'),\n";
-    $db_config_content .= "            'host' => env('DB_HOST', '{$mysql_host}'),\n";
-    $db_config_content .= "            'port' => env('DB_PORT', '{$mysql_port}'),\n";
-    $db_config_content .= "            'database' => env('DB_DATABASE', '{$mysql_database}'),\n";
-    $db_config_content .= "            'username' => env('DB_USERNAME', '{$mysql_user}'),\n";
-    $db_config_content .= "            'password' => env('DB_PASSWORD', '{$mysql_password}'),\n";
-    $db_config_content .= "            'unix_socket' => env('DB_SOCKET', ''),\n";
-    $db_config_content .= "            'charset' => 'utf8mb4',\n";
-    $db_config_content .= "            'collation' => 'utf8mb4_unicode_ci',\n";
-    $db_config_content .= "            'prefix' => '',\n";
-    $db_config_content .= "            'prefix_indexes' => true,\n";
-    $db_config_content .= "            'strict' => true,\n";
-    $db_config_content .= "            'engine' => null,\n";
-    $db_config_content .= "            'options' => extension_loaded('pdo_mysql') ? array_filter([\n";
-    $db_config_content .= "                PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),\n";
-    $db_config_content .= "            ]) : [],\n";
-    $db_config_content .= "        ],\n";
-    $db_config_content .= "    ],\n";
-    $db_config_content .= "];\n";
-    
-    if (file_exists($db_config_file)) {
-        $db_config_backup = $db_config_file . '.bak';
-        if (!file_exists($db_config_backup)) {
-            copy($db_config_file, $db_config_backup);
-            echo "<p>Backed up database config to {$db_config_backup}</p>";
-        }
-    }
-    
-    if (file_put_contents($db_config_file, $db_config_content)) {
-        echo "<p style='color:green'>✓ Created new database config at {$db_config_file}</p>";
+// Create patch file for index.php to load our bootstrap before Laravel
+$index_patch_path = __DIR__ . '/index_patch.php';
+$index_patch_content = <<<EOT
+<?php
+// Patched index.php for Faveo to include direct database config
+// Include the bootstrap file for direct database configuration
+\$db_bootstrap_file = __DIR__ . '/db_bootstrap.php';
+if (file_exists(\$db_bootstrap_file)) {
+    require_once \$db_bootstrap_file;
+}
+
+// Continue with the regular index.php content
+require __DIR__ . '/index.php';
+EOT;
+
+// Write patch file
+$patch_success = false;
+try {
+    file_put_contents($index_patch_path, $index_patch_content);
+    $patch_success = true;
+} catch (Exception $e) {
+    $patch_error = $e->getMessage();
+}
+
+// Show results if accessed directly
+if (php_sapi_name() !== 'cli' && !isset($SKIP_HEADER)) {
+    if ($write_success) {
+        echo "<p class='success'>Bootstrap file created successfully at $bootstrap_file_path</p>";
+        echo "<p>This file will be automatically included when running migrations.</p>";
     } else {
-        echo "<p style='color:red'>✗ Failed to create database config</p>";
+        echo "<p class='error'>Failed to create bootstrap file: $write_error</p>";
     }
-} else {
-    echo "<p style='color:orange'>⚠ Could not find config directory at {$config_dir}</p>";
+    
+    if ($patch_success) {
+        echo "<p class='success'>Index patch file created successfully at $index_patch_path</p>";
+        echo "<p>You can rename this to index.php to use the direct database configuration.</p>";
+    } else {
+        echo "<p class='error'>Failed to create index patch file: $patch_error</p>";
+    }
+    
+    echo "<h2>Next Steps</h2>";
+    echo "<ol>";
+    echo "<li>Include <code>require_once '$bootstrap_file_path';</code> at the beginning of your migration scripts</li>";
+    echo "<li>Alternatively, you can rename <code>index_patch.php</code> to <code>index.php</code> to automatically use the database configuration</li>";
+    echo "<li>If you're still having issues, try the <a href='run-migrations.php'>migration tool</a> which uses this configuration</li>";
+    echo "</ol>";
+    
+    echo "</body></html>";
 }
 
-echo "<h2>Next Steps</h2>";
-echo "<p>1. Make sure the MySQL service is properly linked to your app service in Railway</p>";
-echo "<p>2. Verify that all required environment variables are set</p>";
-echo "<p>3. Redeploy your application to apply these changes</p>";
+// Return the connection and PDO for use in scripts
+return [
+    'connection' => $db_connection,
+    'pdo' => $connection_successful ? $pdo : null,
+    'success' => $connection_successful,
+    'error' => $connection_error,
+    'bootstrap_file' => $bootstrap_file_path,
+    'bootstrap_content' => $bootstrap_content,
+    'write_success' => $write_success
+];
 ?> 
