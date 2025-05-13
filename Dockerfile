@@ -132,6 +132,9 @@ if [ -n "$RAILWAY_ENVIRONMENT" ]; then\n\
   sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD:-faveo_password}/" /var/www/html/.env || true\n\
   # Set trusted proxies for Railway\n\
   sed -i "s/APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" /var/www/html/.env || true\n\
+  # Set Apache ServerName to suppress the warning\n\
+  echo "ServerName localhost" > /etc/apache2/conf-available/servername.conf\n\
+  a2enconf servername\n\
   # Use PORT from Railway if available\n\
   if [ -n "$PORT" ]; then\n\
     echo "Setting up Apache for port $PORT..."\n\
