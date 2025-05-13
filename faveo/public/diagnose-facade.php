@@ -13,6 +13,9 @@ error_reporting(E_ALL);
 // Store diagnostic results
 $diagnostic_results = [];
 
+// After loading the diagnostic results, add this check
+$composer_failed = file_exists(__DIR__ . '/needs_composer_install');
+
 // Start HTML output
 function start_html() {
     echo '<!DOCTYPE html>
@@ -42,6 +45,18 @@ function start_html() {
 <body>
     <div class="container">
         <h1>Facade Root Diagnostic Tool</h1>';
+
+    // At the beginning of the HTML output, after the first box
+    if ($composer_failed) {
+        echo "<div class='test-result test-error'>";
+        echo "<strong>⚠ Composer Installation Failed During Deployment</strong>";
+        echo "<div class='details'>The bootstrap script detected a failure during Composer dependency installation. Please use the Dependency Installer to fix this issue.</div>";
+        echo "</div>";
+        
+        echo "<div class='actions' style='margin-bottom: 20px;'>";
+        echo "<a href='install-dependencies.php' style='background: #ff6600; font-weight: bold;'>Run Dependency Installer Now</a>";
+        echo "</div>";
+    }
 }
 
 // End HTML output
@@ -466,15 +481,13 @@ echo "<p>Based on the diagnostic results, here are the recommended next steps:</
 echo "<ol>";
 
 if (!$laravel_loaded) {
-    echo "<li class='error'>Run 'composer install' to ensure all Laravel dependencies are properly installed.</li>";
+    echo "<li class='error'>Laravel classes are missing. <strong><a href='install-dependencies.php'>Run the Dependency Installer</a></strong> to install Composer dependencies.</li>";
+} else if (!$bootstrap_ok) {
+    echo "<li class='error'>Check that bootstrap/app.php contains the proper Laravel application initialization code.</li>";
 }
 
 if (!$index_ok) {
     echo "<li class='error'>Edit index.php to include bootstrap-app.php at the beginning of the file.</li>";
-}
-
-if (!$bootstrap_ok) {
-    echo "<li class='error'>Check that bootstrap/app.php contains the proper Laravel application initialization code.</li>";
 }
 
 if (!$storage_ok) {
@@ -493,6 +506,9 @@ echo "<li>After making these changes, try to access the application again.</li>"
 echo "</ol>";
 
 echo "<div class='actions'>";
+if (!$laravel_loaded) {
+    echo "<a href='install-dependencies.php' style='background: #ff6600;'>Install Dependencies</a>";
+}
 echo "<a href='/public/'>Go to Main Application</a>";
 echo "<a href='/public/fix-bootstrap.php'>Run Bootstrap Fixer</a>";
 echo "<a href='/public/alt-index.php'>Try Alternative Index</a>";

@@ -21,6 +21,7 @@ vibe-faveo/
     │   ├── alt-index.php                    # Alternative entry point
     │   ├── fix-bootstrap.php                # Bootstrap fixer utility
     │   ├── diagnose-facade.php              # Facade diagnostic tool
+    │   ├── install-dependencies.php         # Composer dependency installer
     │   ├── db-connect-fix.php
     │   ├── db-direct-config.php
     │   ├── db-test.php
@@ -79,7 +80,11 @@ The project uses Docker for containerization with the following key files:
 The application uses a bootstrap script (`bootstrap.sh`) that runs at container startup:
 1. Composer dependency management:
    - Clear composer cache
-   - Install dependencies with error handling
+   - Install dependencies with multiple fallback options:
+     - First attempt: `--no-dev --no-scripts --prefer-dist --optimize-autoloader --no-interaction`
+     - Second attempt: `--no-dev --no-plugins --prefer-dist --no-progress --no-interaction`
+     - Third attempt: `--no-dev --no-interaction`
+   - Creates a flag file (`needs_composer_install`) if all installation attempts fail
    - Generate optimized autoloader with error handling
 2. Directory initialization:
    - Create necessary Laravel storage directories (cache/data, sessions, views, app/public)
@@ -226,6 +231,8 @@ The application includes several specialized scripts to deal with the common Lar
 
 ### diagnose-facade.php
 - A diagnostic tool specifically for facade root issues
+- Checks for the `needs_composer_install` flag and displays a prominent message
+- Provides a direct link to the dependency installer when Laravel classes are missing
 - Tests Laravel framework loading
 - Tests bootstrap file integrity
 - Tests facade initialization
@@ -236,6 +243,21 @@ The application includes several specialized scripts to deal with the common Lar
 
 ## Diagnostic Tools
 The application includes several diagnostic PHP scripts to help troubleshoot connection issues:
+
+### install-dependencies.php
+- Web interface to install Composer dependencies when needed
+- Shows current status of vendor directory and autoloader
+- Runs composer commands with proper options to optimize installation
+- Includes authentication to prevent unauthorized use
+- Creates an optimized autoloader to improve performance
+- Displays detailed output from composer commands
+- Automatically executes multiple dependency management steps:
+  1. Clearing composer cache
+  2. Installing dependencies without dev packages
+  3. Generating an optimized autoloader
+  4. Optionally clearing Laravel config cache
+- Removes the `needs_composer_install` flag once installation completes successfully
+- Links to other diagnostic tools for further setup steps
 
 ### db-test.php
 - Tests database connection using environment variables
@@ -434,6 +456,20 @@ The project includes a complete set of database initialization and maintenance t
       - Check that storage and bootstrap/cache directories have proper permissions
       - Clear Laravel configuration cache if needed
 
+19. Composer Dependency Installation Failures
+    - Issue: Vendor files missing or incomplete after deployment causing "Class not found" errors
+    - Solution: 
+      - Enhanced bootstrap.sh with multiple installation attempts and fallback options
+      - Created install-dependencies.php for web-based dependency installation
+      - Added a flag mechanism to detect and report failed installations
+      - Integrated with diagnose-facade.php for automatic detection and guidance
+      - Clear error reporting and detailed logs of installation process
+    - The system now provides a self-healing mechanism for dependency issues:
+      1. If installation fails during bootstrap, a flag file is created
+      2. diagnose-facade.php detects this flag and shows a prominent message
+      3. User can easily run install-dependencies.php to fix the issues
+      4. After successful installation, the flag is automatically removed
+
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
 2. Used direct file operations instead of artisan commands for cache clearing
@@ -451,6 +487,9 @@ The project includes a complete set of database initialization and maintenance t
 14. Implemented facade root initialization to prevent common Laravel errors
 15. Created alternative entry points for better error handling and diagnostics
 16. Added diagnostic tools for facade-related issues and bootstrapping problems
+17. Improved dependency installation with multiple fallback methods
+18. Added web-based dependency installer for easy troubleshooting
+19. Implemented automatic detection and reporting of dependency issues
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -472,11 +511,13 @@ The project is configured for deployment on Railway with the following considera
 - The start command is set to `/usr/local/bin/bootstrap.sh` to ensure proper initialization
 - The bootstrap script automatically configures Apache to use the correct port
 - After deployment, follow these steps:
-  1. Visit `/public/run-migrations.php` to set up the database
-  2. Visit `/public/repair-database.php` to verify and fix database structure
-  3. Visit `/public/create-admin.php` to create an admin user
-  4. Visit `/public/fix-permissions.php` to fix any permission issues
-  5. Access Faveo at `/public` and log in with your admin credentials
+  1. Visit `/public/diagnose-facade.php` to check the application status
+  2. If Laravel classes are missing, visit `/public/install-dependencies.php` to install dependencies
+  3. Visit `/public/run-migrations.php` to set up the database
+  4. Visit `/public/repair-database.php` to verify and fix database structure
+  5. Visit `/public/create-admin.php` to create an admin user
+  6. Visit `/public/fix-permissions.php` to fix any permission issues
+  7. Access Faveo at `/public` and log in with your admin credentials
 - If you encounter permission issues during setup, use the memory-only alternatives:
   1. Visit `/public/memory-only-fix.php` to configure the database in memory
   2. Visit `/public/run-migrations-memory.php` to run migrations without file access
@@ -633,6 +674,15 @@ Common issues and solutions:
       - Try accessing the application through `/public/alt-index.php`
       - Check that storage and bootstrap/cache directories have proper permissions
       - Clear Laravel configuration cache if needed
+
+19. Missing or Incomplete Vendor Files
+    - Issue: Laravel classes not found, "Class not found" errors after deployment
+    - Solutions:
+      - Visit `diagnose-facade.php` which will automatically detect the issue
+      - Use `install-dependencies.php` to reinstall all dependencies
+      - For command line access: `composer install --no-dev --optimize-autoloader`
+      - Check for the `needs_composer_install` flag in public directory, which indicates bootstrap installation failure
+      - If dependency installation fails repeatedly, check for memory limits or disk space issues
 
 ### Memory-Only Fix Solution
 The project includes a special set of memory-only tools to handle deployment environments with restricted file permissions:

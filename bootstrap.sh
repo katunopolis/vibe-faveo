@@ -2,9 +2,28 @@
 set -e
 
 echo "Running Composer..."
+# Clear composer cache first to avoid any stale data
 composer clearcache
-composer install --no-scripts --no-autoloader || true
-composer dump-autoload --optimize --no-scripts || true
+
+# Try to install dependencies with optimized options and no dev packages
+echo "Installing Composer dependencies..."
+composer install --no-dev --no-scripts --prefer-dist --optimize-autoloader --no-interaction || {
+    echo "First composer install attempt failed. Trying again with different options..."
+    composer install --no-dev --no-plugins --prefer-dist --no-progress --no-interaction || {
+        echo "Second composer install attempt failed. Trying with bare minimum options..."
+        composer install --no-dev --no-interaction || {
+            echo "WARNING: Composer install failed. Will try to continue anyway."
+            # Create flag file to indicate we should run install-dependencies.php
+            touch /var/www/html/public/needs_composer_install
+        }
+    }
+}
+
+# Generate optimized autoloader 
+echo "Generating optimized autoloader..."
+composer dump-autoload --optimize --no-dev --no-scripts || {
+    echo "WARNING: Failed to generate optimized autoloader."
+}
 
 echo "Creating necessary directories..."
 mkdir -p /var/www/html/storage/framework/cache/data
