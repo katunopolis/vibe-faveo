@@ -1,20 +1,13 @@
 <?php
 /**
  * Laravel Migration Runner for Faveo
- * 
- * WARNING: This file should be removed or password-protected after use
  */
 
 // Start timing
 $startTime = microtime(true);
 
-// Basic security - require a key parameter
-$securityKey = 'faveo2025'; // Change this to something more secure
-if (!isset($_GET['key']) || $_GET['key'] !== $securityKey) {
-    header('HTTP/1.0 403 Forbidden');
-    echo 'Access denied. Please provide the correct key.';
-    exit;
-}
+// Remove security key requirement for easier setup
+// We'll leave a note to remove this file after use for security
 
 // Set error reporting for debugging
 ini_set('display_errors', 1);
@@ -45,6 +38,12 @@ echo "<style>
     p.success { color: #2ecc71; font-weight: bold; }
     code { background: #f0f0f0; padding: 2px 4px; border-radius: 3px; }
 </style>";
+
+// Security warning
+echo "<div style='background-color: #fff3cd; color: #856404; padding: 10px; margin-bottom: 20px; border-radius: 5px;'>
+<strong>Security Notice:</strong> This script allows database initialization without authentication. 
+For security reasons, please delete this file after you've successfully set up your Faveo installation.
+</div>";
 
 // Make sure we have a database connection
 try {
