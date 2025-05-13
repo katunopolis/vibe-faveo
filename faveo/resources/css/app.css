@@ -1,0 +1,11 @@
+/**
+ * Placeholder app.css file
+ * 
+ * This file exists to satisfy Laravel Mix asset compilation.
+ * It doesn't contain any actual application styles.
+ */
+
+/* Default styles would go here */
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+} 

@@ -117,13 +117,34 @@ fi\n\
 echo "Clearing Laravel caches..."\n\
 php -r "if (file_exists(\"bootstrap/cache/config.php\")) @unlink(\"bootstrap/cache/config.php\");" || true\n\
 php -r "if (file_exists(\"bootstrap/cache/routes.php\")) @unlink(\"bootstrap/cache/routes.php\");" || true\n\
-php -r "array_map(\"unlink\", glob(\"storage/framework/views/*.php\"));" || true\n\
+php -r "if (is_dir(\"storage/framework/views\")) { \$files = glob(\"storage/framework/views/*.php\"); if (\$files) { array_map(\"unlink\", \$files); }}" || true\n\
 \n\
-# Set database config directly if needed\n\
-sed -i "s/DB_HOST=.*/DB_HOST=db/" /var/www/html/.env || true\n\
-sed -i "s/DB_DATABASE=.*/DB_DATABASE=faveo/" /var/www/html/.env || true\n\
-sed -i "s/DB_USERNAME=.*/DB_USERNAME=faveo/" /var/www/html/.env || true\n\
-sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=faveo_password/" /var/www/html/.env || true\n\
+# Create health check file for Railway\n\
+echo "<?php echo \"OK\"; ?>" > /var/www/html/public/health.php\n\
+\n\
+# Handle Railway environment\n\
+if [ -n "$RAILWAY_ENVIRONMENT" ]; then\n\
+  echo "Running in Railway environment..."\n\
+  # Set database connection using Railway environment variables\n\
+  sed -i "s/DB_HOST=.*/DB_HOST=${DB_HOST:-db}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE:-faveo}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME:-faveo}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD:-faveo_password}/" /var/www/html/.env || true\n\
+  # Set trusted proxies for Railway\n\
+  sed -i "s/APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" /var/www/html/.env || true\n\
+  # Use PORT from Railway if available\n\
+  if [ -n "$PORT" ]; then\n\
+    echo "Setting up Apache for port $PORT..."\n\
+    sed -i "s/Listen 80/Listen $PORT/" /etc/apache2/ports.conf || true\n\
+    sed -i "s/<VirtualHost \\*:80>/<VirtualHost *:$PORT>/" /etc/apache2/sites-available/000-default.conf || true\n\
+  fi\n\
+else\n\
+  # Local development environment settings\n\
+  sed -i "s/DB_HOST=.*/DB_HOST=db/" /var/www/html/.env || true\n\
+  sed -i "s/DB_DATABASE=.*/DB_DATABASE=faveo/" /var/www/html/.env || true\n\
+  sed -i "s/DB_USERNAME=.*/DB_USERNAME=faveo/" /var/www/html/.env || true\n\
+  sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=faveo_password/" /var/www/html/.env || true\n\
+fi\n\
 \n\
 echo "Starting Apache..."\n\
 apache2-foreground\n\

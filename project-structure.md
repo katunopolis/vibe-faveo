@@ -70,14 +70,28 @@ The application uses a bootstrap script (`bootstrap.sh`) that runs at container 
    - Create .env file if not exists (from .env.example)
    - Ensure APP_KEY is set in .env file
    - Clear Laravel caches by directly removing cache files
-   - Set database configuration directly in .env file using sed
-4. Start Apache server
+   - Create a health check endpoint for Railway (`/public/health.php`)
+4. Environment detection and configuration:
+   - Detect Railway environment via `RAILWAY_ENVIRONMENT` variable
+   - Configure database using Railway environment variables
+   - Configure app URL based on Railway settings
+   - Adjust Apache to use the correct PORT as specified by Railway
+   - Fall back to local configuration if not in Railway environment
+5. Start Apache server
 
 ### Known Issues
 The bootstrap script handles the following errors:
 - Facade root errors during artisan commands (bypassed using PHP direct file operations)
 - Ambiguous class resolution warnings from Faveo codebase (these are expected)
 - Apache server name warning (cosmetic issue only)
+- Missing frontend asset files (now handled via webpack.mix.js improvements)
+
+### Frontend Asset Management
+The `webpack.mix.js` file includes the following improvements:
+- Automatic creation of missing resources directories
+- Creation of placeholder JS and CSS files if not present
+- Use of relative paths to prevent build failures
+- Disabled URL processing for CSS to reduce build errors
 
 ### Docker Compose
 The `docker-compose.yml` file (without version attribute) defines two services:
@@ -111,12 +125,12 @@ The application uses a `.env` file with the following key configurations:
 - APP_ENV=local
 - APP_KEY=base64:KLt6cSOazff/QVuWn4VNoNyTiJ0W0+HrY3f9rtAJKew= (pre-generated key)
 - APP_DEBUG=true
-- APP_URL=http://localhost:8080
-- Database configuration (MySQL)
-  - DB_HOST=db (matches service name in docker-compose)
-  - DB_DATABASE=faveo
-  - DB_USERNAME=faveo
-  - DB_PASSWORD=faveo_password
+- APP_URL: Dynamically set based on environment
+- Database configuration (MySQL):
+  - DB_HOST: Used from environment variables in Railway, defaults to 'db' locally
+  - DB_DATABASE: Used from environment variables in Railway, defaults to 'faveo' locally
+  - DB_USERNAME: Used from environment variables in Railway, defaults to 'faveo' locally
+  - DB_PASSWORD: Used from environment variables in Railway, defaults to 'faveo_password' locally
 - Mail configuration
 - FCM configuration
 
@@ -142,12 +156,26 @@ The application uses a `.env` file with the following key configurations:
    - Issue: Multiple classes with same name in different locations
    - Solution: These are expected warnings in the Faveo codebase and don't affect functionality
 
+6. Railway Deployment Failures
+   - Issue: Database configuration not adapting to Railway environment
+   - Solution: Added environment variable detection and dynamic configuration
+   
+7. Railway Health Check Failures
+   - Issue: No simple health check endpoint for Railway to monitor
+   - Solution: Added `/public/health.php` as a minimal working endpoint
+   
+8. Asset Compilation Errors
+   - Issue: Missing CSS and JS files causing build failures
+   - Solution: Modified webpack.mix.js to create placeholder files and use relative paths
+
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
 2. Used direct file operations instead of artisan commands for cache clearing
 3. Added pre-generated application key to avoid key generation issues
 4. Created required storage directories explicitly
-5. Set database configuration using sed directly in bootstrap script
+5. Added Railway environment detection and configuration
+6. Improved webpack configuration to handle missing assets
+7. Added health check endpoint for monitoring
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -155,13 +183,17 @@ The application uses a `.env` file with the following key configurations:
 3. Clear config and cache when encountering facade-related issues
 4. Use Docker Compose for local development environment
 5. Be aware of the ambiguous class resolution warnings (they're expected)
+6. Test your changes locally before deploying to Railway
 
 ## Deployment
 The project is configured for deployment on Railway with the following considerations:
-- Environment variables must be properly set
-- Database migrations must be run
-- Storage permissions must be configured
-- Cache must be cleared after deployment
+- Environment variables must be properly set in the Railway dashboard:
+  - DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD (for database connection)
+  - APP_URL (for application URL)
+  - PORT (automatically provided by Railway)
+- The health check path should be set to `/public/health.php` in Railway
+- The bootstrap script will automatically configure Apache to use the correct port
+- If you encounter persistent issues, check Railway logs for specific error messages
 
 ## Testing
 - Unit tests should be run before deployment
@@ -192,13 +224,20 @@ Common issues and solutions:
 1. Dependency conflicts: Run `composer clearcache` followed by `composer update`
 2. Permission issues: Check directory permissions for storage and bootstrap/cache
 3. Cache issues: Use direct file operations to clear Laravel cache files
-4. Environment issues: Verify .env configuration matches docker-compose environment variables
+4. Environment issues: Verify .env configuration matches expected environment variables
 5. Docker build issues: Use `docker-compose down` followed by `docker-compose up --build`
 6. Laravel facade errors: Expected in Faveo application - these can be bypassed using direct file operations
+7. Railway deployment issues:
+   - Check if health check is configured to use `/public/health.php`
+   - Verify database credentials are set correctly in Railway environment variables
+   - Check logs for any container startup errors
+   - Ensure the PORT environment variable is being respected by your container
 
 ## Future Improvements
 1. Automated dependency updates
 2. Enhanced error handling
 3. Improved build process
 4. Better documentation
-5. Address class ambiguity warnings through proper namespace management 
+5. Address class ambiguity warnings through proper namespace management
+6. Create a dedicated Railway configuration section in the bootstrap script
+7. Implement proper Laravel Mix asset compilation 
