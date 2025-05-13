@@ -20,7 +20,10 @@ vibe-faveo/
     │   ├── db-direct-config.php
     │   ├── db-test.php
     │   ├── health.php
+    │   ├── memory-only-fix.php
     │   ├── run-migrations.php
+    │   ├── run-migrations-memory.php
+    │   ├── direct-migration.php
     │   ├── repair-database.php
     │   ├── create-admin.php
     │   ├── fix-permissions.php
@@ -330,6 +333,30 @@ The project includes a complete set of database initialization and maintenance t
     - Used array() syntax instead of [] shorthand for older PHP compatibility
     - Created simplified bootstrapping procedure with older version support
 
+15. File Permission Issues in Restricted Environments
+    - Issue: Unable to write configuration files in some hosting environments
+    - Solution: Created memory-only versions of key configuration scripts
+    - Added `memory-only-fix.php` that configures database without writing files
+    - Created `run-migrations-memory.php` that runs all setup steps without file access
+    - Implemented Excel dependency stub generation to avoid package installation errors
+    - Used $_ENV, putenv() and $GLOBALS for in-memory configuration instead of file writes
+    - If you encounter permission errors:
+      1. Visit `/public/memory-only-fix.php` to verify database connection
+      2. Visit `/public/run-migrations-memory.php` to run migrations in memory
+      3. If Excel dependency is causing issues, the memory script includes automatic stub generation
+
+16. Artisan Command Failures
+    - Issue: All artisan commands fail with error code 255 during migration
+    - Solution: Created `direct-migration.php` that bypasses Laravel completely
+    - This script creates essential database tables using direct SQL statements
+    - Sets up a minimal admin user and basic system configuration
+    - Uses PDO for direct database access without Laravel dependencies
+    - Requires the memory-only-fix.php to establish database connection
+    - If you encounter artisan command failures:
+      1. Visit `/public/direct-migration.php` to set up the database directly
+      2. After setup completes, continue with standard admin user creation
+      3. Change the default admin password immediately after login
+
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
 2. Used direct file operations instead of artisan commands for cache clearing
@@ -369,6 +396,12 @@ The project is configured for deployment on Railway with the following considera
   3. Visit `/public/create-admin.php` to create an admin user
   4. Visit `/public/fix-permissions.php` to fix any permission issues
   5. Access Faveo at `/public` and log in with your admin credentials
+- If you encounter permission issues during setup, use the memory-only alternatives:
+  1. Visit `/public/memory-only-fix.php` to configure the database in memory
+  2. Visit `/public/run-migrations-memory.php` to run migrations without file access
+- If all artisan commands fail with error code 255, use the direct migration tool:
+  1. Visit `/public/direct-migration.php` to set up the database directly without Laravel
+  2. This script will create essential tables and an admin user automatically
 - If you encounter persistent issues:
   - Check Railway logs for specific error messages
   - Visit `/public/db-connect-fix.php` to diagnose and fix database connection issues
@@ -460,6 +493,68 @@ Common issues and solutions:
     - Used array() syntax instead of [] shorthand for older PHP compatibility
     - Created simplified bootstrapping procedure with older version support
 
+15. File Permission Issues in Restricted Environments
+    - Issue: Unable to write configuration files in some hosting environments
+    - Solution: Created memory-only versions of key configuration scripts
+    - Added `memory-only-fix.php` that configures database without writing files
+    - Created `run-migrations-memory.php` that runs all setup steps without file access
+    - Implemented Excel dependency stub generation to avoid package installation errors
+    - Used $_ENV, putenv() and $GLOBALS for in-memory configuration instead of file writes
+    - If you encounter permission errors:
+      1. Visit `/public/memory-only-fix.php` to verify database connection
+      2. Visit `/public/run-migrations-memory.php` to run migrations in memory
+      3. If Excel dependency is causing issues, the memory script includes automatic stub generation
+
+16. Artisan Command Failures
+    - Issue: All artisan commands fail with error code 255 during migration
+    - Solution: Created `direct-migration.php` that bypasses Laravel completely
+    - This script creates essential database tables using direct SQL statements
+    - Sets up a minimal admin user and basic system configuration
+    - Uses PDO for direct database access without Laravel dependencies
+    - Requires the memory-only-fix.php to establish database connection
+    - If you encounter artisan command failures:
+      1. Visit `/public/direct-migration.php` to set up the database directly
+      2. After setup completes, continue with standard admin user creation
+      3. Change the default admin password immediately after login
+
+### Build Process Improvements
+1. Created a bootstrap script for runtime initialization
+2. Used direct file operations instead of artisan commands for cache clearing
+3. Added pre-generated application key to avoid key generation issues
+4. Created required storage directories explicitly
+5. Added Railway environment detection and configuration
+6. Improved webpack configuration to handle missing assets
+7. Added health check endpoint for monitoring
+8. Set Apache ServerName configuration to suppress warnings
+9. Updated railway.toml to use the bootstrap script as the start command
+10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
+11. Added smart database connection handling with auto-detection and failover
+12. Created diagnostic tools for troubleshooting connection issues
+13. Added comprehensive database initialization scripts for easy setup
+
+## Memory-Only Fix Solution
+The project includes a special set of memory-only tools to handle deployment environments with restricted file permissions:
+
+### memory-only-fix.php
+A zero-footprint database configuration helper that:
+- Works entirely in memory without writing any files to disk
+- Avoids permission errors common in restricted deployment environments
+- Tests multiple connection methods (Environment Variables, Railway Variables, DATABASE_URL, Railway Internal, .env File)
+- Sets database configuration directly in memory using $_ENV, putenv() and $GLOBALS
+- Provides detailed diagnostic information through a web interface
+- Returns connection results for use in other scripts
+- Shows database tables when connection is successful
+
+### run-migrations-memory.php
+A memory-only version of the migration script that:
+- Uses the memory-only configuration helper to avoid file permission issues
+- Creates a stub for Excel dependency to fix missing package errors
+- Runs database commands with increased memory limits
+- Handles migration failures gracefully with detailed error reporting
+- Verifies database tables after migration
+
+These tools work together to ensure reliable database setup even in environments with limited PHP versions or constrained resources.
+
 ## Future Improvements
 1. Automated dependency updates
 2. Enhanced error handling
@@ -469,6 +564,8 @@ Common issues and solutions:
 6. Create a dedicated Railway configuration section in the bootstrap script
 7. Implement proper Laravel Mix asset compilation
 8. Add more comprehensive diagnostic tools for other common issues
+9. Create additional memory-only versions of other maintenance tools (repair-database, create-admin, fix-permissions)
+10. Add support for more database connection methods in memory-only tools
 
 ### Database Setup Tools
 The project now includes several improved database configuration and setup tools:
@@ -497,5 +594,31 @@ Enhanced migration script that:
 - Falls back to artisan commands with increased memory limits when needed
 - Provides detailed feedback on the migration process
 - Shows database tables after completion
+
+#### memory-only-fix.php
+Zero-footprint database configuration helper that:
+- Works entirely in memory without writing any files to disk
+- Tests multiple connection methods automatically
+- Sets database configuration using $_ENV, putenv() and $GLOBALS
+- Provides detailed connection diagnostic information
+- Returns connection results for use in other scripts
+
+#### run-migrations-memory.php
+Memory-only version of the migration script that:
+- Uses the memory-only configuration helper to avoid file permission issues
+- Creates a stub for Excel dependency to fix missing package errors
+- Runs database commands with increased memory limits
+- Handles migration failures gracefully with detailed error reporting
+- Verifies database tables after migration
+
+#### direct-migration.php
+Direct database setup script that:
+- Bypasses Laravel framework and artisan commands completely
+- Creates essential database tables using direct SQL queries
+- Creates a minimal admin user account with role assignment
+- Initializes system settings with default values
+- Works when artisan commands fail with error code 255
+- Provides detailed visual feedback on each step of the process
+- Uses the memory-only database configuration system
 
 These tools work together to ensure reliable database setup even in environments with limited PHP versions or constrained resources.
