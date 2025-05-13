@@ -126,10 +126,11 @@ echo "<?php echo \"OK\"; ?>" > /var/www/html/public/health.php\n\
 if [ -n "$RAILWAY_ENVIRONMENT" ]; then\n\
   echo "Running in Railway environment..."\n\
   # Set database connection using Railway environment variables\n\
-  sed -i "s/DB_HOST=.*/DB_HOST=${DB_HOST:-db}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_DATABASE=.*/DB_DATABASE=${DB_DATABASE:-faveo}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_USERNAME=.*/DB_USERNAME=${DB_USERNAME:-faveo}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${DB_PASSWORD:-faveo_password}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_HOST=.*/DB_HOST=${MYSQLHOST:-mysql.railway.internal}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_PORT=.*/DB_PORT=${MYSQLPORT:-3306}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_DATABASE=.*/DB_DATABASE=${MYSQLDATABASE:-railway}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_USERNAME=.*/DB_USERNAME=${MYSQLUSER:-root}/" /var/www/html/.env || true\n\
+  sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQLPASSWORD:-}/" /var/www/html/.env || true\n\
   # Set trusted proxies for Railway\n\
   sed -i "s/APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" /var/www/html/.env || true\n\
   # Set Apache ServerName to suppress the warning\n\

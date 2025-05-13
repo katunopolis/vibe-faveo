@@ -75,6 +75,7 @@ The application uses a bootstrap script (`bootstrap.sh`) that runs at container 
    - Detect Railway environment via `RAILWAY_ENVIRONMENT` variable
    - Configure database using Railway environment variables
    - Configure app URL based on Railway settings
+   - Set Apache ServerName to suppress warning messages
    - Adjust Apache to use the correct PORT as specified by Railway
    - Fall back to local configuration if not in Railway environment
 5. Start Apache server
@@ -83,7 +84,7 @@ The application uses a bootstrap script (`bootstrap.sh`) that runs at container 
 The bootstrap script handles the following errors:
 - Facade root errors during artisan commands (bypassed using PHP direct file operations)
 - Ambiguous class resolution warnings from Faveo codebase (these are expected)
-- Apache server name warning (cosmetic issue only)
+- Apache server name warning (resolved by setting ServerName directive)
 - Missing frontend asset files (now handled via webpack.mix.js improvements)
 
 ### Frontend Asset Management
@@ -134,6 +135,25 @@ The application uses a `.env` file with the following key configurations:
 - Mail configuration
 - FCM configuration
 
+## Railway Configuration
+The application is configured for deployment on Railway with the `railway.toml` file:
+- **Build Configuration**:
+  - Uses the Dockerfile for building
+- **Deployment Configuration**:
+  - Start command: `/usr/local/bin/bootstrap.sh`
+  - Health check path: `/public/health.php`
+  - Health check timeout: 100 seconds
+  - Restart policy: ON_FAILURE with max 10 retries
+- **Setup Phase**:
+  - Required Nix packages: php82, php82Packages.composer
+- **Database Configuration**:
+  - Uses Railway's MySQL plugin environment variables:
+    - MYSQLHOST: Host name for the database (default: mysql.railway.internal)
+    - MYSQLPORT: Port for the database (default: 3306)
+    - MYSQLDATABASE: Database name (default: railway)
+    - MYSQLUSER: Database username (default: root)
+    - MYSQLPASSWORD: Database password
+
 ## Build Issues and Solutions
 ### Known Issues
 1. Composer Dependencies
@@ -161,10 +181,14 @@ The application uses a `.env` file with the following key configurations:
    - Solution: Added environment variable detection and dynamic configuration
    
 7. Railway Health Check Failures
-   - Issue: No simple health check endpoint for Railway to monitor
-   - Solution: Added `/public/health.php` as a minimal working endpoint
+   - Issue: Health check configured incorrectly causing deployment failures
+   - Solution: Updated railway.toml to use `/public/health.php` as the health check path and set the correct start command
    
-8. Asset Compilation Errors
+8. Apache Server Name Warning
+   - Issue: Warning messages about server name not being set
+   - Solution: Added ServerName directive configuration in the bootstrap script
+   
+9. Asset Compilation Errors
    - Issue: Missing CSS and JS files causing build failures
    - Solution: Modified webpack.mix.js to create placeholder files and use relative paths
 
@@ -176,6 +200,8 @@ The application uses a `.env` file with the following key configurations:
 5. Added Railway environment detection and configuration
 6. Improved webpack configuration to handle missing assets
 7. Added health check endpoint for monitoring
+8. Set Apache ServerName configuration to suppress warnings
+9. Updated railway.toml to use the bootstrap script as the start command
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -191,8 +217,9 @@ The project is configured for deployment on Railway with the following considera
   - DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD (for database connection)
   - APP_URL (for application URL)
   - PORT (automatically provided by Railway)
-- The health check path should be set to `/public/health.php` in Railway
-- The bootstrap script will automatically configure Apache to use the correct port
+- The health check path is set to `/public/health.php` in railway.toml
+- The start command is set to `/usr/local/bin/bootstrap.sh` to ensure proper initialization
+- The bootstrap script automatically configures Apache to use the correct port
 - If you encounter persistent issues, check Railway logs for specific error messages
 
 ## Testing
@@ -228,10 +255,21 @@ Common issues and solutions:
 5. Docker build issues: Use `docker-compose down` followed by `docker-compose up --build`
 6. Laravel facade errors: Expected in Faveo application - these can be bypassed using direct file operations
 7. Railway deployment issues:
-   - Check if health check is configured to use `/public/health.php`
+   - Verify health check is configured to use `/public/health.php` in railway.toml
+   - Ensure start command is set to `/usr/local/bin/bootstrap.sh` in railway.toml
    - Verify database credentials are set correctly in Railway environment variables
    - Check logs for any container startup errors
    - Ensure the PORT environment variable is being respected by your container
+8. Apache server name warnings: These are now suppressed by setting ServerName directive in the bootstrap script
+9. Database connection issues in Railway:
+   - Ensure you have added a MySQL plugin in the Railway dashboard
+   - Make sure the bootstrap script is using the correct environment variables for database connection:
+     - MYSQLHOST instead of DB_HOST
+     - MYSQLPORT instead of DB_PORT
+     - MYSQLDATABASE instead of DB_DATABASE
+     - MYSQLUSER instead of DB_USERNAME
+     - MYSQLPASSWORD instead of DB_PASSWORD
+   - Use /public/db-test.php to diagnose database connection issues
 
 ## Future Improvements
 1. Automated dependency updates
