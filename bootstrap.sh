@@ -26,295 +26,191 @@ fi
 # Create health check file for Railway
 echo "<?php echo \"OK\"; ?>" > /var/www/html/public/health.php
 
-# Create db test file
-echo "<?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
+# Create a parser script for the DATABASE_URL
+cat > /tmp/parse_db_url.php << 'EOF'
+<?php
+// Parse various database URL formats
+$connection_info = array(
+  'host' => '',
+  'port' => '',
+  'database' => '',
+  'username' => '',
+  'password' => '',
+  'success' => false,
+  'message' => ''
+);
 
-echo '<h1>Database Connection Test</h1>';
-
-// File System Checks
-echo '<h2>File System Checks</h2>';
-\$envPath = '/var/www/html/.env';
-echo '<p>.env path: ' . \$envPath . '</p>';
-echo '<p>.env exists: ' . (file_exists(\$envPath) ? 'Yes' : 'No') . '</p>';
-
-if (file_exists(\$envPath)) {
-  echo '<p>.env file permissions: ' . substr(sprintf('%o', fileperms(\$envPath)), -4) . '</p>';
-  echo '<p>.env file readable: ' . (is_readable(\$envPath) ? 'Yes' : 'No') . '</p>';
-  echo '<p>.env file owner: ' . posix_getpwuid(fileowner(\$envPath))['name'] . '</p>';
-  echo '<p>.env file size: ' . filesize(\$envPath) . ' bytes</p>';
-  
-  // Show first few lines of .env
-  echo '<p>First 10 lines of .env file:</p>';
-  \$lines = file(\$envPath, FILE_IGNORE_NEW_LINES);
-  for (\$i = 0; \$i < min(10, count(\$lines)); \$i++) {
-    if (strpos(\$lines[\$i], 'PASSWORD') !== false) {
-      echo preg_replace('/PASSWORD=.*/', 'PASSWORD=[hidden]', \$lines[\$i]) . '<br>';
-    } else {
-      echo \$lines[\$i] . '<br>';
-    }
-  }
-  
-  // Parse .env file for DB settings
-  echo '<h2>Environment Variables from .env</h2>';
-  \$connection = \$host = \$port = \$database = \$username = '';
-  foreach (\$lines as \$line) {
-    if (strpos(\$line, 'DB_CONNECTION=') === 0) \$connection = substr(\$line, strlen('DB_CONNECTION='));
-    if (strpos(\$line, 'DB_HOST=') === 0) \$host = substr(\$line, strlen('DB_HOST='));
-    if (strpos(\$line, 'DB_PORT=') === 0) \$port = substr(\$line, strlen('DB_PORT='));
-    if (strpos(\$line, 'DB_DATABASE=') === 0) \$database = substr(\$line, strlen('DB_DATABASE='));
-    if (strpos(\$line, 'DB_USERNAME=') === 0) \$username = substr(\$line, strlen('DB_USERNAME='));
-  }
-  
-  echo '<p>Connection: ' . \$connection . '</p>';
-  echo '<p>Host: ' . \$host . '</p>';
-  echo '<p>Port: ' . \$port . '</p>';
-  echo '<p>Database: ' . \$database . '</p>';
-  echo '<p>Username: ' . \$username . '</p>';
-}
-
-// Railway Environment Variables
-echo '<h2>Railway Environment Variables</h2>';
-echo '<p>RAILWAY_ENVIRONMENT: ' . getenv('RAILWAY_ENVIRONMENT') . '</p>';
-echo '<p>MYSQLHOST: ' . getenv('MYSQLHOST') . '</p>';
-echo '<p>MYSQLPORT: ' . getenv('MYSQLPORT') . '</p>';
-echo '<p>MYSQLDATABASE: ' . getenv('MYSQLDATABASE') . '</p>';
-echo '<p>MYSQLUSER: ' . getenv('MYSQLUSER') . '</p>';
-echo '<p>MYSQLPASSWORD: ' . (getenv('MYSQLPASSWORD') ? 'Set (hidden)' : 'Not set') . '</p>';
-
-// Connection Test
-echo '<h2>Connection Test</h2>';
-echo '<p>Using direct environment variables instead of .env</p>';
-
-\$host = getenv('MYSQLHOST');
-\$port = getenv('MYSQLPORT') ?: '3306';
-\$database = getenv('MYSQLDATABASE');
-\$username = getenv('MYSQLUSER');
-\$password = getenv('MYSQLPASSWORD');
-
-// Connection string
-\$dsn = \"mysql:host={\$host};port={\$port};dbname={\$database}\";
-echo \"<p>Attempting to connect to: {\$dsn}</p>\";
-
-try {
-  \$pdo = new PDO(\$dsn, \$username, \$password);
-  \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-  echo '<p style=\"color:green\">✓ Connection successful!</p>';
-  
-  // Show some database information
-  \$stmt = \$pdo->query('SELECT VERSION()');
-  \$version = \$stmt->fetchColumn();
-  echo '<p>MySQL Version: ' . \$version . '</p>';
-  
-  \$stmt = \$pdo->query('SHOW TABLES');
-  \$tables = \$stmt->fetchAll(PDO::FETCH_COLUMN);
-  echo '<p>Tables found: ' . count(\$tables) . '</p>';
-  if (count(\$tables) > 0) {
-    echo '<ul>';
-    foreach (\$tables as \$table) {
-      echo '<li>' . \$table . '</li>';
-    }
-    echo '</ul>';
-  }
-} catch (PDOException \$e) {
-  echo '<p style=\"color:red\">✗ Connection failed:</p>';
-  echo '<p>' . \$e->getMessage() . '</p>';
-  
-  // Hostname resolution test
-  echo '<h3>Hostname Resolution Test</h3>';
-  echo '<p>Resolving ' . \$host . ': ';
-  \$ip = gethostbyname(\$host);
-  if (\$ip != \$host) {
-    echo 'Success (' . \$ip . ')</p>';
-  } else {
-    echo 'Failed (could not resolve)</p>';
-  }
-  
-  // Check DNS records
-  echo '<p>DNS Records for ' . \$host . ':</p>';
-  echo '<pre>';
-  print_r(dns_get_record(\$host));
-  echo '</pre>';
-  
-  // Try alternative hostnames
-  echo '<h3>Trying alternative connection methods:</h3>';
-  
-  // Direct using Railway variables
+// Try DATABASE_URL first (Railway recommended way)
+$database_url = getenv('DATABASE_URL');
+if ($database_url) {
   try {
-    \$directDsn = \"mysql:host={\$host};port={\$port};dbname={\$database}\";
-    echo \"<p>Trying direct Railway variables connection:</p>\";
-    echo \"<p>DSN: {\$directDsn}</p>\";
-    \$directPdo = new PDO(\$directDsn, \$username, \$password);
-    \$directPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    echo '<p style=\"color:green\">SUCCESS!</p>';
-  } catch (PDOException \$e) {
-    echo '<p style=\"color:red\">FAILED: ' . \$e->getMessage() . '</p>';
-  }
-  
-  // Try common hostnames in Railway
-  echo '<h3>Trying common MySQL hostnames in Railway:</h3>';
-  \$hostnames = ['mysql', 'db', 'database', 'mysql-service', 'mysql.internal', 'localhost', '127.0.0.1'];
-  
-  foreach (\$hostnames as \$testHost) {
-    try {
-      \$testDsn = \"mysql:host={\$testHost};port={\$port};dbname={\$database}\";
-      echo \"<p>Testing host '{\$testHost}': {\$testDsn}</p>\";
-      \$testPdo = new PDO(\$testDsn, \$username, \$password);
-      \$testPdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-      echo '<p style=\"color:green\">SUCCESS for ' . \$testHost . '!</p>';
-    } catch (PDOException \$e) {
-      echo '<p style=\"color:red\">FAILED for ' . \$testHost . ': ' . \$e->getMessage() . '</p>';
+    $parsed = parse_url($database_url);
+    if ($parsed) {
+      $connection_info['host'] = $parsed['host'] ?? '';
+      $connection_info['port'] = $parsed['port'] ?? '3306';
+      $connection_info['database'] = ltrim($parsed['path'] ?? '', '/');
+      $connection_info['username'] = $parsed['user'] ?? '';
+      $connection_info['password'] = $parsed['pass'] ?? '';
+      
+      // Test the connection
+      $dsn = "mysql:host={$connection_info['host']};port={$connection_info['port']};dbname={$connection_info['database']}";
+      $conn = new PDO($dsn, $connection_info['username'], $connection_info['password'], array(PDO::ATTR_TIMEOUT => 3));
+      $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      
+      $connection_info['success'] = true;
+      $connection_info['message'] = "Connected using DATABASE_URL";
     }
+  } catch (Exception $e) {
+    $connection_info['message'] = "DATABASE_URL parse error: " . $e->getMessage();
+  }
+} else {
+  $connection_info['message'] = "DATABASE_URL environment variable not found, trying alternatives";
+}
+
+// If DATABASE_URL didn't work, try MYSQL_URL (Railway specific)
+if (!$connection_info['success']) {
+  $mysql_url = getenv('MYSQL_URL');
+  if ($mysql_url) {
+    try {
+      $parsed = parse_url($mysql_url);
+      if ($parsed) {
+        $connection_info['host'] = $parsed['host'] ?? '';
+        $connection_info['port'] = $parsed['port'] ?? '3306';
+        $connection_info['database'] = ltrim($parsed['path'] ?? '', '/');
+        $connection_info['username'] = $parsed['user'] ?? '';
+        $connection_info['password'] = $parsed['pass'] ?? '';
+        
+        // Test the connection
+        $dsn = "mysql:host={$connection_info['host']};port={$connection_info['port']};dbname={$connection_info['database']}";
+        $conn = new PDO($dsn, $connection_info['username'], $connection_info['password'], array(PDO::ATTR_TIMEOUT => 3));
+        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        $connection_info['success'] = true;
+        $connection_info['message'] = "Connected using MYSQL_URL";
+      }
+    } catch (Exception $e) {
+      $connection_info['message'] = "MYSQL_URL parse error: " . $e->getMessage();
+    }
+  } else {
+    $connection_info['message'] .= ", MYSQL_URL not found";
   }
 }
 
-// MySQL Service Status Check
-echo '<h2>MySQL Service Status Check</h2>';
-if (getenv('RAILWAY_ENVIRONMENT')) {
-  echo '<p>This is a Railway deployment, so we can\'t directly check service status from PHP.</p>';
-  echo '<p>Please check the Railway dashboard for the MySQL service status.</p>';
-} else {
-  // Local environment
-  echo '<p>This is a local development environment.</p>';
-  echo '<p>MySQL service status:</p>';
-  echo '<pre>';
-  system('service mysql status 2>&1');
-  echo '</pre>';
+// If those didn't work, try the traditional Railway variables
+if (!$connection_info['success']) {
+  // Try Public URL format
+  $mysql_public_url = getenv('MYSQL_PUBLIC_URL');
+  if ($mysql_public_url) {
+    try {
+      $parsed = parse_url($mysql_public_url);
+      if ($parsed) {
+        $connection_info['host'] = $parsed['host'] ?? '';
+        $connection_info['port'] = $parsed['port'] ?? '3306';
+        $connection_info['database'] = ltrim($parsed['path'] ?? '', '/');
+        $connection_info['username'] = $parsed['user'] ?? '';
+        $connection_info['password'] = $parsed['pass'] ?? '';
+        
+        // Test the connection
+        $dsn = "mysql:host={$connection_info['host']};port={$connection_info['port']};dbname={$connection_info['database']}";
+        $conn = new PDO($dsn, $connection_info['username'], $connection_info['password'], array(PDO::ATTR_TIMEOUT => 3));
+        $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        $connection_info['success'] = true;
+        $connection_info['message'] = "Connected using MYSQL_PUBLIC_URL";
+      }
+    } catch (Exception $e) {
+      $connection_info['message'] .= ", MYSQL_PUBLIC_URL parse error: " . $e->getMessage();
+    }
+  } else {
+    $connection_info['message'] .= ", MYSQL_PUBLIC_URL not found";
+  }
 }
-?>" > /var/www/html/public/db-test.php
+
+// If all previous methods failed, try the hardcoded Railway values
+if (!$connection_info['success']) {
+  // Traditional separate environment variables
+  $mysqlhost = getenv('MYSQLHOST');
+  $mysqlport = getenv('MYSQLPORT');
+  $mysqldatabase = getenv('MYSQLDATABASE');
+  $mysqluser = getenv('MYSQLUSER');
+  $mysqlpassword = getenv('MYSQLPASSWORD');
+  
+  if ($mysqlhost && $mysqluser && $mysqldatabase) {
+    try {
+      $connection_info['host'] = $mysqlhost;
+      $connection_info['port'] = $mysqlport ?: '3306';
+      $connection_info['database'] = $mysqldatabase;
+      $connection_info['username'] = $mysqluser;
+      $connection_info['password'] = $mysqlpassword;
+      
+      // Test the connection
+      $dsn = "mysql:host={$connection_info['host']};port={$connection_info['port']};dbname={$connection_info['database']}";
+      $conn = new PDO($dsn, $connection_info['username'], $connection_info['password'], array(PDO::ATTR_TIMEOUT => 3));
+      $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+      
+      $connection_info['success'] = true;
+      $connection_info['message'] = "Connected using separate MYSQL* variables";
+    } catch (Exception $e) {
+      $connection_info['message'] .= ", Separate MYSQL* variables error: " . $e->getMessage();
+    }
+  } else {
+    $connection_info['message'] .= ", Separate MYSQL* variables not complete";
+  }
+}
+
+// If all previous methods failed, try the hardcoded external hosts
+if (!$connection_info['success']) {
+  // Last resort - try hardcoded values from previous findings
+  try {
+    $connection_info['host'] = 'yamabiko.proxy.rlwy.net';
+    $connection_info['port'] = '52501';
+    $connection_info['database'] = 'railway';
+    $connection_info['username'] = 'root';
+    // Get password from env or use an empty string
+    $password = getenv('MYSQLPASSWORD') ?: '';
+    $connection_info['password'] = $password;
+    
+    // Test the connection
+    $dsn = "mysql:host={$connection_info['host']};port={$connection_info['port']};dbname={$connection_info['database']}";
+    $conn = new PDO($dsn, $connection_info['username'], $connection_info['password'], array(PDO::ATTR_TIMEOUT => 3));
+    $conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    $connection_info['success'] = true;
+    $connection_info['message'] = "Connected using hardcoded external hostname";
+  } catch (Exception $e) {
+    $connection_info['message'] .= ", Hardcoded external hostname error: " . $e->getMessage();
+  }
+}
+
+// Output connection info as JSON
+echo json_encode($connection_info);
+EOF
 
 # Handle Railway environment
 if [ -n "$RAILWAY_ENVIRONMENT" ]; then
   echo "Running in Railway environment..."
   
-  # Debug MySQL environment variables
-  echo "MySQL Environment Variables:"
-  echo "MYSQLHOST: ${MYSQLHOST:-not set}"
-  echo "MYSQLPORT: ${MYSQLPORT:-not set}"
-  echo "MYSQLDATABASE: ${MYSQLDATABASE:-not set}"
-  echo "MYSQLUSER: ${MYSQLUSER:-not set}"
-  echo "MYSQLPASSWORD: ${MYSQLPASSWORD:+is set}"
-  
-  # Check if we have a MySQL public URL available
-  MYSQL_PUBLIC_URL=${MYSQL_PUBLIC_URL:-}
-  if [ -n "$MYSQL_PUBLIC_URL" ]; then
-    echo "Using MySQL Public URL: (masked for security)"
-    
-    # Extract host and port from the public URL
-    # Format: mysql://user:pass@hostname:port/database
-    MYSQL_PUBLIC_HOST=$(echo "$MYSQL_PUBLIC_URL" | sed -n 's/.*@\([^:]*\).*/\1/p')
-    MYSQL_PUBLIC_PORT=$(echo "$MYSQL_PUBLIC_URL" | sed -n 's/.*:\([0-9]*\)\/.*/\1/p')
-    
-    echo "Extracted public host: $MYSQL_PUBLIC_HOST"
-    echo "Extracted public port: $MYSQL_PUBLIC_PORT"
-  else
-    echo "No MySQL Public URL found, using internal Railway hostname"
-    MYSQL_PUBLIC_HOST=""
-    MYSQL_PUBLIC_PORT=""
-  fi
-  
   # Set Apache ServerName to suppress the warning
   echo "ServerName localhost" > /etc/apache2/conf-available/servername.conf
   a2enconf servername
   
-  # Create a small program to test multiple database connection methods
-  cat > /tmp/db-connect-test.php << 'EOF'
-<?php
-// Attempt to connect to the database using multiple methods
-$result = array(
-  'success' => false,
-  'host' => '',
-  'port' => '',
-  'message' => ''
-);
-
-// Get connection details
-$internal_host = getenv('MYSQLHOST');
-$internal_port = getenv('MYSQLPORT');
-$public_url = getenv('MYSQL_PUBLIC_URL');
-$public_host = '';
-$public_port = '';
-$database = getenv('MYSQLDATABASE');
-$username = getenv('MYSQLUSER');
-$password = getenv('MYSQLPASSWORD');
-
-// Parse public URL if available
-if ($public_url) {
-  $parsed = parse_url($public_url);
-  if ($parsed) {
-    $public_host = $parsed['host'] ?? '';
-    $public_port = $parsed['port'] ?? '';
-  }
-}
-
-// Test public connection first
-if ($public_host && $public_port) {
-  try {
-    $dsn = "mysql:host={$public_host};port={$public_port};dbname={$database}";
-    $pdo = new PDO($dsn, $username, $password, array(PDO::ATTR_TIMEOUT => 3));
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $result['success'] = true;
-    $result['host'] = $public_host;
-    $result['port'] = $public_port;
-    $result['message'] = "Connected using public URL";
-    echo json_encode($result);
-    exit;
-  } catch (PDOException $e) {
-    // Continue to next method if this fails
-  }
-}
-
-// Test internal connection if public failed
-if ($internal_host && $internal_port) {
-  try {
-    $dsn = "mysql:host={$internal_host};port={$internal_port};dbname={$database}";
-    $pdo = new PDO($dsn, $username, $password, array(PDO::ATTR_TIMEOUT => 3));
-    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    $result['success'] = true;
-    $result['host'] = $internal_host;
-    $result['port'] = $internal_port;
-    $result['message'] = "Connected using internal hostname";
-    echo json_encode($result);
-    exit;
-  } catch (PDOException $e) {
-    // Continue to next method if this fails
-  }
-}
-
-// Try hardcoded external hostname
-$external_host = 'yamabiko.proxy.rlwy.net';
-$external_port = '52501';
-try {
-  $dsn = "mysql:host={$external_host};port={$external_port};dbname={$database}";
-  $pdo = new PDO($dsn, $username, $password, array(PDO::ATTR_TIMEOUT => 3));
-  $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-  $result['success'] = true;
-  $result['host'] = $external_host;
-  $result['port'] = $external_port;
-  $result['message'] = "Connected using hardcoded external hostname";
-  echo json_encode($result);
-  exit;
-} catch (PDOException $e) {
-  // If all methods fail, return error
-  $result['message'] = "All connection methods failed";
-  echo json_encode($result);
-  exit;
-}
-EOF
-
-  # Run the test script to find the best connection method
-  echo "Testing database connection methods..."
-  CONNECTION_TEST=$(php /tmp/db-connect-test.php)
-  echo "Connection test result: $CONNECTION_TEST"
+  # Run the parser script to get database connection details
+  echo "Detecting database connection..."
+  CONNECTION_INFO=$(php /tmp/parse_db_url.php)
+  echo "Connection info: $CONNECTION_INFO"
   
   # Parse the JSON result
-  CONNECTION_SUCCESS=$(echo "$CONNECTION_TEST" | grep -o '"success":true' || echo "")
-  DB_HOST=$(echo "$CONNECTION_TEST" | sed -n 's/.*"host":"\([^"]*\)".*/\1/p')
-  DB_PORT=$(echo "$CONNECTION_TEST" | sed -n 's/.*"port":"\([^"]*\)".*/\1/p')
+  CONNECTION_SUCCESS=$(echo "$CONNECTION_INFO" | grep -o '"success":true' || echo "")
+  DB_HOST=$(echo "$CONNECTION_INFO" | sed -n 's/.*"host":"\([^"]*\)".*/\1/p')
+  DB_PORT=$(echo "$CONNECTION_INFO" | sed -n 's/.*"port":"\([^"]*\)".*/\1/p')
+  DB_DATABASE=$(echo "$CONNECTION_INFO" | sed -n 's/.*"database":"\([^"]*\)".*/\1/p')
+  DB_USERNAME=$(echo "$CONNECTION_INFO" | sed -n 's/.*"username":"\([^"]*\)".*/\1/p')
+  DB_PASSWORD=$(echo "$CONNECTION_INFO" | sed -n 's/.*"password":"\([^"]*\)".*/\1/p')
+  CONNECTION_MESSAGE=$(echo "$CONNECTION_INFO" | sed -n 's/.*"message":"\([^"]*\)".*/\1/p')
   
   if [ -n "$CONNECTION_SUCCESS" ] && [ -n "$DB_HOST" ]; then
-    echo "Successfully connected to database at $DB_HOST:$DB_PORT"
+    echo "Successfully connected to database at $DB_HOST:$DB_PORT using $DB_USERNAME"
+    echo "Connection method: $CONNECTION_MESSAGE"
     
     # Use the successful connection details for .env file
     cat > /var/www/html/.env << EOF
@@ -330,9 +226,9 @@ LOG_LEVEL=debug
 DB_CONNECTION=mysql
 DB_HOST=$DB_HOST
 DB_PORT=$DB_PORT
-DB_DATABASE=${MYSQLDATABASE:-railway}
-DB_USERNAME=${MYSQLUSER:-root}
-DB_PASSWORD=${MYSQLPASSWORD}
+DB_DATABASE=$DB_DATABASE
+DB_USERNAME=$DB_USERNAME
+DB_PASSWORD=$DB_PASSWORD
 
 BROADCAST_DRIVER=log
 CACHE_DRIVER=file
@@ -363,21 +259,97 @@ EOF
 \$_ENV['DB_CONNECTION'] = 'mysql';
 \$_ENV['DB_HOST'] = '$DB_HOST';
 \$_ENV['DB_PORT'] = '$DB_PORT';
-\$_ENV['DB_DATABASE'] = '${MYSQLDATABASE:-railway}';
-\$_ENV['DB_USERNAME'] = '${MYSQLUSER:-root}';
-\$_ENV['DB_PASSWORD'] = '${MYSQLPASSWORD}';
+\$_ENV['DB_DATABASE'] = '$DB_DATABASE';
+\$_ENV['DB_USERNAME'] = '$DB_USERNAME';
+\$_ENV['DB_PASSWORD'] = '$DB_PASSWORD';
 
 // Also set them in environment to be doubly sure
 putenv('DB_CONNECTION=mysql');
 putenv('DB_HOST=$DB_HOST');
 putenv('DB_PORT=$DB_PORT');
-putenv('DB_DATABASE=${MYSQLDATABASE:-railway}');
-putenv('DB_USERNAME=${MYSQLUSER:-root}');
-putenv('DB_PASSWORD=${MYSQLPASSWORD}');
+putenv('DB_DATABASE=$DB_DATABASE');
+putenv('DB_USERNAME=$DB_USERNAME');
+putenv('DB_PASSWORD=$DB_PASSWORD');
+
+// If we have the DATABASE_URL, store it for Laravel to use directly
+\$database_url = getenv('DATABASE_URL');
+if (\$database_url) {
+    \$_ENV['DATABASE_URL'] = \$database_url;
+    putenv('DATABASE_URL=\$database_url');
+}
+EOF
+
+    # Create a db-test page to show current connection status
+    cat > /var/www/html/public/connection-status.php << EOF
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+echo '<h1>Database Connection Status</h1>';
+
+// Get environment variables
+echo '<h2>Connection Variables</h2>';
+echo '<p>DATABASE_URL: ' . (getenv('DATABASE_URL') ? 'Set (hidden for security)' : 'Not set') . '</p>';
+echo '<p>MYSQL_URL: ' . (getenv('MYSQL_URL') ? 'Set (hidden for security)' : 'Not set') . '</p>';
+echo '<p>DB_HOST: ' . getenv('DB_HOST') . '</p>';
+echo '<p>DB_PORT: ' . getenv('DB_PORT') . '</p>';
+echo '<p>DB_DATABASE: ' . getenv('DB_DATABASE') . '</p>';
+echo '<p>DB_USERNAME: ' . getenv('DB_USERNAME') . '</p>';
+echo '<p>DB_PASSWORD: ' . (getenv('DB_PASSWORD') ? 'Set (hidden for security)' : 'Not set') . '</p>';
+
+// Test the connection
+echo '<h2>Connection Test</h2>';
+try {
+    \$dsn = 'mysql:host=' . getenv('DB_HOST') . ';port=' . getenv('DB_PORT') . ';dbname=' . getenv('DB_DATABASE');
+    echo '<p>DSN: ' . \$dsn . '</p>';
+    
+    \$conn = new PDO(\$dsn, getenv('DB_USERNAME'), getenv('DB_PASSWORD'));
+    \$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    echo '<p style="color:green">✓ Connection successful!</p>';
+    
+    // Show tables
+    \$stmt = \$conn->query('SHOW TABLES');
+    \$tables = \$stmt->fetchAll(PDO::FETCH_COLUMN);
+    
+    echo '<p>Tables found: ' . count(\$tables) . '</p>';
+    if (count(\$tables) > 0) {
+        echo '<ul>';
+        foreach (\$tables as \$table) {
+            echo '<li>' . \$table . '</li>';
+        }
+        echo '</ul>';
+    }
+} catch (PDOException \$e) {
+    echo '<p style="color:red">✗ Connection failed: ' . \$e->getMessage() . '</p>';
+}
+
+// Parse DATABASE_URL as a test
+if (getenv('DATABASE_URL')) {
+    echo '<h2>DATABASE_URL Parsing Test</h2>';
+    try {
+        \$url = parse_url(getenv('DATABASE_URL'));
+        echo '<p>Host: ' . \$url['host'] . '</p>';
+        echo '<p>Port: ' . \$url['port'] . '</p>';
+        echo '<p>Database: ' . ltrim(\$url['path'], '/') . '</p>';
+        echo '<p>Username: ' . \$url['user'] . '</p>';
+        echo '<p>Password: ' . (isset(\$url['pass']) ? 'Set (hidden for security)' : 'Not set') . '</p>';
+        
+        // Test connection with parsed values
+        \$dsn = 'mysql:host=' . \$url['host'] . ';port=' . \$url['port'] . ';dbname=' . ltrim(\$url['path'], '/');
+        \$conn2 = new PDO(\$dsn, \$url['user'], \$url['pass']);
+        \$conn2->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        echo '<p style="color:green">✓ CONNECTION VIA DATABASE_URL SUCCESSFUL!</p>';
+    } catch (Exception \$e) {
+        echo '<p style="color:red">✗ DATABASE_URL parsing failed: ' . \$e->getMessage() . '</p>';
+    }
+}
 EOF
 
   else
     echo "All database connection methods failed. Using default values and hoping for the best."
+    echo "Connection error: $CONNECTION_MESSAGE"
     
     # Try both the internal and external hostnames in the .env file
     cat > /var/www/html/.env << EOF
@@ -393,8 +365,8 @@ LOG_LEVEL=debug
 DB_CONNECTION=mysql
 DB_HOST=yamabiko.proxy.rlwy.net
 DB_PORT=52501
-DB_DATABASE=${MYSQLDATABASE:-railway}
-DB_USERNAME=${MYSQLUSER:-root}
+DB_DATABASE=railway
+DB_USERNAME=root
 DB_PASSWORD=${MYSQLPASSWORD}
 
 BROADCAST_DRIVER=log
@@ -420,63 +392,72 @@ EOF
     # Create a failover bootstrap file trying both connection methods
     cat > /var/www/html/public/db_bootstrap.php << EOF
 <?php
-// Railway database connection with failover between internal and external hostnames
+// Railway database connection with failover between connection methods
 
-// Define connection details
-\$internal_host = 'mysql.railway.internal';
-\$internal_port = '3306';
-\$external_host = 'yamabiko.proxy.rlwy.net';
-\$external_port = '52501';
-\$database = '${MYSQLDATABASE:-railway}';
-\$username = '${MYSQLUSER:-root}';
-\$password = '${MYSQLPASSWORD}';
-
-// First try the external connection
-\$connected = false;
-try {
-    \$dsn = "mysql:host={\$external_host};port={\$external_port};dbname={\$database}";
-    \$pdo = new PDO(\$dsn, \$username, \$password, array(PDO::ATTR_TIMEOUT => 2));
-    \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-    \$connected = true;
-    
-    // Set environment variables to external host
-    \$_ENV['DB_CONNECTION'] = 'mysql';
-    \$_ENV['DB_HOST'] = \$external_host;
-    \$_ENV['DB_PORT'] = \$external_port;
-    \$_ENV['DB_DATABASE'] = \$database;
-    \$_ENV['DB_USERNAME'] = \$username;
-    \$_ENV['DB_PASSWORD'] = \$password;
-    
-    putenv('DB_CONNECTION=mysql');
-    putenv('DB_HOST=' . \$external_host);
-    putenv('DB_PORT=' . \$external_port);
-    putenv('DB_DATABASE=' . \$database);
-    putenv('DB_USERNAME=' . \$username);
-    putenv('DB_PASSWORD=' . \$password);
-} catch (PDOException \$e) {
-    // External connection failed, try internal
+// Try the DATABASE_URL environment variable first (new Railway recommendation)
+\$database_url = getenv('DATABASE_URL');
+if (\$database_url) {
     try {
-        \$dsn = "mysql:host={\$internal_host};port={\$internal_port};dbname={\$database}";
+        \$url = parse_url(\$database_url);
+        \$host = \$url['host'] ?? 'yamabiko.proxy.rlwy.net';
+        \$port = \$url['port'] ?? '52501';
+        \$database = ltrim(\$url['path'] ?? '/railway', '/');
+        \$username = \$url['user'] ?? 'root';
+        \$password = \$url['pass'] ?? '';
+        
+        // Test the connection
+        \$dsn = "mysql:host={\$host};port={\$port};dbname={\$database}";
         \$pdo = new PDO(\$dsn, \$username, \$password, array(PDO::ATTR_TIMEOUT => 2));
         \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
-        \$connected = true;
         
-        // Set environment variables to internal host
+        // Set environment variables
         \$_ENV['DB_CONNECTION'] = 'mysql';
-        \$_ENV['DB_HOST'] = \$internal_host;
-        \$_ENV['DB_PORT'] = \$internal_port;
+        \$_ENV['DB_HOST'] = \$host;
+        \$_ENV['DB_PORT'] = \$port;
         \$_ENV['DB_DATABASE'] = \$database;
         \$_ENV['DB_USERNAME'] = \$username;
         \$_ENV['DB_PASSWORD'] = \$password;
         
         putenv('DB_CONNECTION=mysql');
-        putenv('DB_HOST=' . \$internal_host);
-        putenv('DB_PORT=' . \$internal_port);
+        putenv('DB_HOST=' . \$host);
+        putenv('DB_PORT=' . \$port);
         putenv('DB_DATABASE=' . \$database);
         putenv('DB_USERNAME=' . \$username);
         putenv('DB_PASSWORD=' . \$password);
     } catch (PDOException \$e) {
-        // Both connections failed
+        // Connection failed, will try the next method
+    }
+} 
+
+// If DATABASE_URL failed, try our known external connection
+if (!isset(\$pdo)) {
+    try {
+        \$external_host = 'yamabiko.proxy.rlwy.net';
+        \$external_port = '52501';
+        \$database = 'railway';
+        \$username = 'root';
+        \$password = getenv('MYSQLPASSWORD');
+        
+        \$dsn = "mysql:host={\$external_host};port={\$external_port};dbname={\$database}";
+        \$pdo = new PDO(\$dsn, \$username, \$password, array(PDO::ATTR_TIMEOUT => 2));
+        \$pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+        
+        // Set environment variables to external host
+        \$_ENV['DB_CONNECTION'] = 'mysql';
+        \$_ENV['DB_HOST'] = \$external_host;
+        \$_ENV['DB_PORT'] = \$external_port;
+        \$_ENV['DB_DATABASE'] = \$database;
+        \$_ENV['DB_USERNAME'] = \$username;
+        \$_ENV['DB_PASSWORD'] = \$password;
+        
+        putenv('DB_CONNECTION=mysql');
+        putenv('DB_HOST=' . \$external_host);
+        putenv('DB_PORT=' . \$external_port);
+        putenv('DB_DATABASE=' . \$database);
+        putenv('DB_USERNAME=' . \$username);
+        putenv('DB_PASSWORD=' . \$password);
+    } catch (PDOException \$e) {
+        // If this fails too, we're out of luck
     }
 }
 
@@ -486,12 +467,12 @@ try {
     'connections' => [
         'mysql' => [
             'driver' => 'mysql',
-            'url' => '',
-            'host' => \$_ENV['DB_HOST'],
-            'port' => \$_ENV['DB_PORT'],
-            'database' => \$database,
-            'username' => \$username,
-            'password' => \$password,
+            'url' => getenv('DATABASE_URL') ?: '',
+            'host' => getenv('DB_HOST') ?: 'yamabiko.proxy.rlwy.net',
+            'port' => getenv('DB_PORT') ?: '52501',
+            'database' => getenv('DB_DATABASE') ?: 'railway',
+            'username' => getenv('DB_USERNAME') ?: 'root',
+            'password' => getenv('DB_PASSWORD') ?: '',
             'unix_socket' => '',
             'charset' => 'utf8mb4',
             'collation' => 'utf8mb4_unicode_ci',
