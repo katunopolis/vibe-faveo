@@ -51,12 +51,53 @@ if [ -n "$RAILWAY_ENVIRONMENT" ]; then
   # Check if MySQL variables are available
   if [ -n "$MYSQLHOST" ] && [ -n "$MYSQLUSER" ] && [ -n "$MYSQLPASSWORD" ]; then
     echo "MySQL environment variables found. Using them for database configuration."
-    # Set database connection using Railway environment variables
-    sed -i "s/DB_HOST=.*/DB_HOST=${MYSQLHOST}/" /var/www/html/.env || true
-    sed -i "s/DB_PORT=.*/DB_PORT=${MYSQLPORT:-3306}/" /var/www/html/.env || true
-    sed -i "s/DB_DATABASE=.*/DB_DATABASE=${MYSQLDATABASE:-railway}/" /var/www/html/.env || true
-    sed -i "s/DB_USERNAME=.*/DB_USERNAME=${MYSQLUSER}/" /var/www/html/.env || true
-    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQLPASSWORD}/" /var/www/html/.env || true
+    
+    # Debug: Show current .env content
+    echo "Current .env file content (database part):"
+    grep -E "DB_" /var/www/html/.env || echo "No DB_ variables found in .env"
+    
+    # Write DB variables directly to .env file
+    echo "Updating .env file with MySQL environment variables..."
+    cat > /var/www/html/.env << EOF
+APP_NAME=Faveo
+APP_ENV=local
+APP_KEY=base64:KLt6cSOazff/QVuWn4VNoNyTiJ0W0+HrY3f9rtAJKew=
+APP_DEBUG=true
+APP_URL=${APP_URL:-http://localhost}
+
+LOG_CHANNEL=stack
+LOG_LEVEL=debug
+
+DB_CONNECTION=mysql
+DB_HOST=${MYSQLHOST}
+DB_PORT=${MYSQLPORT:-3306}
+DB_DATABASE=${MYSQLDATABASE:-railway}
+DB_USERNAME=${MYSQLUSER}
+DB_PASSWORD=${MYSQLPASSWORD}
+
+BROADCAST_DRIVER=log
+CACHE_DRIVER=file
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+
+MAIL_MAILER=smtp
+MAIL_HOST=mailpit
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=null
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="\${APP_NAME}"
+
+FCM_SERVER_KEY=
+FCM_SENDER_ID=
+EOF
+    
+    # Verify the changes were applied
+    echo "Updated .env file content (database part):"
+    grep -E "DB_" /var/www/html/.env || echo "No DB_ variables found in .env"
     
     # Test database connection
     echo "Testing database connection..."
@@ -84,12 +125,48 @@ if [ -n "$RAILWAY_ENVIRONMENT" ]; then
     fi
   else
     echo "WARNING: MySQL environment variables not found. Using fallback values."
-    # Use fallback values
-    sed -i "s/DB_HOST=.*/DB_HOST=mysql.railway.internal/" /var/www/html/.env || true
-    sed -i "s/DB_PORT=.*/DB_PORT=3306/" /var/www/html/.env || true
-    sed -i "s/DB_DATABASE=.*/DB_DATABASE=railway/" /var/www/html/.env || true
-    sed -i "s/DB_USERNAME=.*/DB_USERNAME=root/" /var/www/html/.env || true
-    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=/" /var/www/html/.env || true
+    # Use fallback values with direct file writing
+    echo "Writing fallback values to .env file..."
+    cat > /var/www/html/.env << EOF
+APP_NAME=Faveo
+APP_ENV=local
+APP_KEY=base64:KLt6cSOazff/QVuWn4VNoNyTiJ0W0+HrY3f9rtAJKew=
+APP_DEBUG=true
+APP_URL=${APP_URL:-http://localhost}
+
+LOG_CHANNEL=stack
+LOG_LEVEL=debug
+
+DB_CONNECTION=mysql
+DB_HOST=mysql.railway.internal
+DB_PORT=3306
+DB_DATABASE=railway
+DB_USERNAME=root
+DB_PASSWORD=
+
+BROADCAST_DRIVER=log
+CACHE_DRIVER=file
+FILESYSTEM_DISK=local
+QUEUE_CONNECTION=sync
+SESSION_DRIVER=file
+SESSION_LIFETIME=120
+
+MAIL_MAILER=smtp
+MAIL_HOST=mailpit
+MAIL_PORT=1025
+MAIL_USERNAME=null
+MAIL_PASSWORD=null
+MAIL_ENCRYPTION=null
+MAIL_FROM_ADDRESS="hello@example.com"
+MAIL_FROM_NAME="\${APP_NAME}"
+
+FCM_SERVER_KEY=
+FCM_SENDER_ID=
+EOF
+    
+    # Verify the changes were applied
+    echo "Updated .env file with fallback values (database part):"
+    grep -E "DB_" /var/www/html/.env || echo "No DB_ variables found in .env"
   fi
   # Set trusted proxies for Railway
   sed -i "s/APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" /var/www/html/.env || true

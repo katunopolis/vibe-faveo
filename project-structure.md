@@ -295,6 +295,18 @@ Common issues and solutions:
     - If you see error code 127 during the build process, it might be related to the bootstrap script
     - Use the external bootstrap.sh file approach instead of inline script creation
 
+11. Environment File Issues:
+    - Issue: The .env file might not be properly updated using sed commands
+    - Solution: Use direct file writing with cat heredoc syntax instead of sed replacements
+    - Use db-test.php to diagnose .env file loading issues and check file permissions
+
+12. Railway MySQL Connection Issues:
+    - Issue: mysql.railway.internal hostname not resolving in Railway environment
+    - Solutions:
+      - Ensure MySQL plugin is properly linked to your app service
+      - Try using the direct environment variables in your app if .env variables aren't loading
+      - If all else fails, consider setting up a separate MySQL service outside of Railway
+
 ## Future Improvements
 1. Automated dependency updates
 2. Enhanced error handling
