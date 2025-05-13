@@ -10,6 +10,7 @@ vibe-faveo/
 ├── .gitignore
 ├── Dockerfile
 ├── Dockerfile.dev
+├── bootstrap.sh
 ├── docker-compose.yml
 ├── railway.toml
 ├── project-structure.md
@@ -53,7 +54,7 @@ The project uses Docker for containerization with the following key files:
 5. Composer installation
 6. Permissions configuration
 7. Environment setup
-8. Create bootstrap script for runtime initialization
+8. Copy bootstrap script for runtime initialization
 9. Node dependencies installation
 10. Final permissions setup
 
@@ -199,6 +200,10 @@ The application is configured for deployment on Railway with the `railway.toml` 
    - Issue: Missing CSS and JS files causing build failures
    - Solution: Modified webpack.mix.js to create placeholder files and use relative paths
 
+10. Bootstrap Script Creation Error
+   - Issue: Complex echo command in Dockerfile causing build failures
+   - Solution: Created a separate bootstrap.sh file and used COPY in the Dockerfile instead
+
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
 2. Used direct file operations instead of artisan commands for cache clearing
@@ -209,6 +214,7 @@ The application is configured for deployment on Railway with the `railway.toml` 
 7. Added health check endpoint for monitoring
 8. Set Apache ServerName configuration to suppress warnings
 9. Updated railway.toml to use the bootstrap script as the start command
+10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -285,6 +291,9 @@ Common issues and solutions:
      - MYSQLPASSWORD instead of DB_PASSWORD
    - Use /public/db-test.php to diagnose database connection issues
    - Check deployment logs for database connection debugging information
+10. Dockerfile build errors:
+    - If you see error code 127 during the build process, it might be related to the bootstrap script
+    - Use the external bootstrap.sh file approach instead of inline script creation
 
 ## Future Improvements
 1. Automated dependency updates
@@ -293,4 +302,4 @@ Common issues and solutions:
 4. Better documentation
 5. Address class ambiguity warnings through proper namespace management
 6. Create a dedicated Railway configuration section in the bootstrap script
-7. Implement proper Laravel Mix asset compilation 
+7. Implement proper Laravel Mix asset compilation
