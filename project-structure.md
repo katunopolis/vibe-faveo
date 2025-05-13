@@ -15,7 +15,13 @@ vibe-faveo/
 ├── railway.toml
 ├── project-structure.md
 └── faveo/
-    └── [Faveo application files]
+    ├── public/
+    │   ├── db-connect-fix.php
+    │   ├── db-direct-config.php
+    │   ├── db-test.php
+    │   ├── health.php
+    │   └── [Other public files]
+    └── [Other Faveo application files]
 ```
 
 ## Docker Configuration
@@ -69,17 +75,23 @@ The application uses a bootstrap script (`bootstrap.sh`) that runs at container 
    - Set proper permissions for storage and cache
 3. Laravel initialization:
    - Create .env file if not exists (from .env.example)
-   - Ensure APP_KEY is set in .env file
-   - Clear Laravel caches by directly removing cache files
    - Create a health check endpoint for Railway (`/public/health.php`)
-4. Environment detection and configuration:
+   - Create diagnostic scripts for database connection troubleshooting
+4. Database connection configuration:
+   - Auto-detect available MySQL connections (both internal and external)
+   - Try multiple connection methods (internal hostname, external hostname, socket)
+   - Use the first successful connection method
+   - Create a smart failover system between connection methods
+   - Generate configuration files based on the working connection
+5. Environment detection and configuration:
    - Detect Railway environment via `RAILWAY_ENVIRONMENT` variable
+   - Extract connection details from MySQL_PUBLIC_URL if available
    - Configure database using Railway environment variables
    - Configure app URL based on Railway settings
    - Set Apache ServerName to suppress warning messages
    - Adjust Apache to use the correct PORT as specified by Railway
    - Fall back to local configuration if not in Railway environment
-5. Start Apache server
+6. Start Apache server
 
 ### Known Issues
 The bootstrap script handles the following errors:
@@ -87,6 +99,7 @@ The bootstrap script handles the following errors:
 - Ambiguous class resolution warnings from Faveo codebase (these are expected)
 - Apache server name warning (resolved by setting ServerName directive)
 - Missing frontend asset files (now handled via webpack.mix.js improvements)
+- MySQL hostname resolution issues (resolved using external hostname and port)
 
 ### Frontend Asset Management
 The `webpack.mix.js` file includes the following improvements:
@@ -129,7 +142,8 @@ The application uses a `.env` file with the following key configurations:
 - APP_DEBUG=true
 - APP_URL: Dynamically set based on environment
 - Database configuration (MySQL):
-  - DB_HOST: Used from environment variables in Railway, defaults to 'db' locally
+  - DB_HOST: Auto-detected working hostname (internal or external)
+  - DB_PORT: Auto-detected working port
   - DB_DATABASE: Used from environment variables in Railway, defaults to 'faveo' locally
   - DB_USERNAME: Used from environment variables in Railway, defaults to 'faveo' locally
   - DB_PASSWORD: Used from environment variables in Railway, defaults to 'faveo_password' locally
@@ -147,20 +161,48 @@ The application is configured for deployment on Railway with the `railway.toml` 
   - Restart policy: ON_FAILURE with max 10 retries
 - **Setup Phase**:
   - Required Nix packages: php82, php82Packages.composer
+- **Builder Environment**:
+  - Required Nix packages: nodejs, yarn
 - **Database Configuration**:
   - Uses Railway's MySQL plugin environment variables:
-    - MYSQLHOST: Host name for the database
+    - MYSQLHOST: Host name for the database (internal hostname)
     - MYSQLPORT: Port for the database (default: 3306)
     - MYSQLDATABASE: Database name (default: railway)
     - MYSQLUSER: Database username
     - MYSQLPASSWORD: Database password
+    - MYSQL_PUBLIC_URL: External URL for MySQL (format: mysql://user:pass@hostname:port/database)
   - **IMPORTANT**: You must link the MySQL service to your app service in the Railway dashboard
   - The bootstrap script will automatically:
-    - Debug MySQL environment variables
-    - Check if MySQL variables are available
-    - Configure database connection
-    - Test database connection
-    - Run migrations if database connection is successful
+    - Parse both internal and external connection details
+    - Test all possible connection methods
+    - Use the first successful connection
+    - Configure the application with working connection details
+
+## Diagnostic Tools
+The application includes several diagnostic PHP scripts to help troubleshoot connection issues:
+
+### db-test.php
+- Tests database connection using environment variables
+- Shows detailed connection error information
+- Performs hostname resolution tests
+- Tries alternative hostnames and connection methods
+
+### db-connect-fix.php
+- Comprehensive tool to fix database connection issues
+- Tests multiple hostname/port combinations
+- Tries different connection methods (PDO, mysqli, socket)
+- Automatically implements a working solution if found
+- Updates configuration files with working connection details
+
+### db-direct-config.php
+- Directly configures database connection without relying on .env
+- Creates bootstrap file to be included at the beginning of index.php
+- Updates Laravel database configuration to use environment variables
+- Tests connection with the configured settings
+
+### health.php
+- Simple health check endpoint for Railway
+- Returns "OK" to indicate the application is running
 
 ## Build Issues and Solutions
 ### Known Issues
@@ -201,8 +243,13 @@ The application is configured for deployment on Railway with the `railway.toml` 
    - Solution: Modified webpack.mix.js to create placeholder files and use relative paths
 
 10. Bootstrap Script Creation Error
-   - Issue: Complex echo command in Dockerfile causing build failures
-   - Solution: Created a separate bootstrap.sh file and used COPY in the Dockerfile instead
+    - Issue: Complex echo command in Dockerfile causing build failures
+    - Solution: Created a separate bootstrap.sh file and used COPY in the Dockerfile instead
+
+11. MySQL Hostname Resolution Issue
+    - Issue: Internal hostname mysql.railway.internal not resolving properly
+    - Solution: Added support for external hostname/port from MYSQL_PUBLIC_URL environment variable 
+    - Added auto-detection and failover between internal and external connection methods
 
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
@@ -215,6 +262,8 @@ The application is configured for deployment on Railway with the `railway.toml` 
 8. Set Apache ServerName configuration to suppress warnings
 9. Updated railway.toml to use the bootstrap script as the start command
 10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
+11. Added smart database connection handling with auto-detection and failover
+12. Created diagnostic tools for troubleshooting connection issues
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -227,13 +276,16 @@ The application is configured for deployment on Railway with the `railway.toml` 
 ## Deployment
 The project is configured for deployment on Railway with the following considerations:
 - Environment variables must be properly set in the Railway dashboard:
-  - DB_HOST, DB_DATABASE, DB_USERNAME, DB_PASSWORD (for database connection)
+  - MySQL connection variables are automatically set when linking MySQL service
   - APP_URL (for application URL)
   - PORT (automatically provided by Railway)
 - The health check path is set to `/public/health.php` in railway.toml
 - The start command is set to `/usr/local/bin/bootstrap.sh` to ensure proper initialization
 - The bootstrap script automatically configures Apache to use the correct port
-- If you encounter persistent issues, check Railway logs for specific error messages
+- If you encounter persistent issues:
+  - Check Railway logs for specific error messages
+  - Visit /public/db-connect-fix.php to diagnose and fix database connection issues
+  - Visit /public/db-test.php to see detailed connection diagnostics
 
 ## Testing
 - Unit tests should be run before deployment
@@ -282,15 +334,13 @@ Common issues and solutions:
      3. Go to the "Variables" tab
      4. Click "Connect" or "Link Service" and select your MySQL service
      5. This ensures the environment variables are shared between services
-   - If linking doesn't work, manually copy the environment variables from MySQL service to your app service
-   - Make sure the bootstrap script is using the correct environment variables for database connection:
-     - MYSQLHOST instead of DB_HOST
-     - MYSQLPORT instead of DB_PORT
-     - MYSQLDATABASE instead of DB_DATABASE
-     - MYSQLUSER instead of DB_USERNAME
-     - MYSQLPASSWORD instead of DB_PASSWORD
-   - Use /public/db-test.php to diagnose database connection issues
-   - Check deployment logs for database connection debugging information
+   - If MySQL hostname resolution fails, use the diagnostic tools:
+     1. Visit /public/db-connect-fix.php to automatically fix connection issues
+     2. Visit /public/db-test.php to see detailed connection diagnostics
+   - If automatic fixes don't work, manually set the correct hostname/port:
+     - Use yamabiko.proxy.rlwy.net (or your specific external hostname) instead of mysql.railway.internal
+     - Use the external port (52501 or your specific port) instead of the default 3306
+   - The updated bootstrap.sh will automatically try both internal and external connections
 10. Dockerfile build errors:
     - If you see error code 127 during the build process, it might be related to the bootstrap script
     - Use the external bootstrap.sh file approach instead of inline script creation
@@ -304,8 +354,9 @@ Common issues and solutions:
     - Issue: mysql.railway.internal hostname not resolving in Railway environment
     - Solutions:
       - Ensure MySQL plugin is properly linked to your app service
-      - Try using the direct environment variables in your app if .env variables aren't loading
-      - If all else fails, consider setting up a separate MySQL service outside of Railway
+      - Use the external hostname and port from MYSQL_PUBLIC_URL environment variable
+      - The updated bootstrap.sh now automatically tries both internal and external connections
+      - Visit /public/db-connect-fix.php to automatically fix connection issues
 
 ## Future Improvements
 1. Automated dependency updates
@@ -315,3 +366,4 @@ Common issues and solutions:
 5. Address class ambiguity warnings through proper namespace management
 6. Create a dedicated Railway configuration section in the bootstrap script
 7. Implement proper Laravel Mix asset compilation
+8. Add more comprehensive diagnostic tools for other common issues
