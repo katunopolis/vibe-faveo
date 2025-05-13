@@ -87,11 +87,19 @@ function executeSql($pdo, $sql, $description = "SQL Query") {
             return true;
         } else {
             $error = $pdo->errorInfo();
-            echo "<p class='error'>Query failed: {$error[2]}</p>";
-            return false;
+            if ($error[0] !== '00000') {
+                echo "<p class='error'>Query failed: [{$error[0]}] {$error[1]} - {$error[2]}</p>";
+                return false;
+            }
+            echo "<p class='success'>Query executed (no rows affected)</p>";
+            return true;
         }
     } catch (PDOException $e) {
         echo "<p class='error'>Exception: " . $e->getMessage() . "</p>";
+        echo "<p class='error'>Code: " . $e->getCode() . "</p>";
+        if ($e->errorInfo) {
+            echo "<p class='error'>SQL State: " . $e->errorInfo[0] . "</p>";
+        }
         return false;
     }
     
@@ -121,9 +129,9 @@ function createUsersTable($pdo) {
         `password` varchar(60) COLLATE utf8_unicode_ci NOT NULL,
         `active` int(11) NOT NULL,
         `is_delete` tinyint(1) NOT NULL DEFAULT '0',
-        `ext` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
-        `country_code` int(11) NOT NULL,
-        `phone_number` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
+        `ext` varchar(255) COLLATE utf8_unicode_ci DEFAULT '',
+        `country_code` int(11) DEFAULT 0,
+        `phone_number` varchar(255) COLLATE utf8_unicode_ci DEFAULT '',
         `mobile` varchar(255) COLLATE utf8_unicode_ci DEFAULT NULL,
         `agent_sign` text COLLATE utf8_unicode_ci,
         `account_type` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
@@ -222,10 +230,11 @@ function createAdminUser($pdo) {
     
     $sql = "INSERT INTO `users` 
         (`user_name`, `first_name`, `last_name`, `gender`, `email`, `password`, 
-        `active`, `account_type`, `account_status`, `created_at`, `updated_at`) 
+        `active`, `account_type`, `account_status`, `ext`, `country_code`, `phone_number`,
+        `created_at`, `updated_at`) 
         VALUES 
         ('admin', 'System', 'Administrator', 1, 'admin@example.com', '$password', 
-        1, 'admin', 'active', '$now', '$now')";
+        1, 'admin', 'active', '', 0, '', '$now', '$now')";
     
     if (executeSql($pdo, $sql, "Creating admin user")) {
         echo "<div class='step'>";
@@ -266,37 +275,47 @@ function createAdminRole($pdo) {
         echo "<p class='warning'>Admin role already exists with ID $roleId</p>";
     }
     
-    // Now assign the role to the admin user
-    $stmt = $pdo->prepare("SELECT id FROM users WHERE email = 'admin@example.com'");
-    $stmt->execute();
-    $userId = $stmt->fetchColumn();
-    
-    if ($userId && $roleId) {
-        // Check if the role is already assigned
-        $stmt = $pdo->prepare("SELECT COUNT(*) FROM user_role WHERE role_id = ? AND user_id = ?");
-        $stmt->execute([$roleId, $userId]);
-        $count = $stmt->fetchColumn();
+    // Now assign the role to the admin user if it exists
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM users WHERE email = 'admin@example.com'");
+        $stmt->execute();
+        $userId = $stmt->fetchColumn();
         
-        if ($count > 0) {
-            echo "<p class='warning'>Role already assigned to user</p>";
-            return true;
+        if (!$userId) {
+            echo "<p class='warning'>Admin user not found, skipping role assignment</p>";
+            return true; // Not a failure case, the user creation itself would have already reported an error
         }
         
-        $now = date('Y-m-d H:i:s');
-        $sql = "INSERT INTO `user_role` (`role_id`, `user_id`, `created_at`, `updated_at`)
-                VALUES ($roleId, $userId, '$now', '$now')";
-        
-        return executeSql($pdo, $sql, "Assigning admin role to user");
+        if ($roleId) {
+            // Check if the role is already assigned
+            $stmt = $pdo->prepare("SELECT COUNT(*) FROM user_role WHERE role_id = ? AND user_id = ?");
+            $stmt->execute([$roleId, $userId]);
+            $count = $stmt->fetchColumn();
+            
+            if ($count > 0) {
+                echo "<p class='warning'>Role already assigned to user</p>";
+                return true;
+            }
+            
+            $now = date('Y-m-d H:i:s');
+            $sql = "INSERT INTO `user_role` (`role_id`, `user_id`, `created_at`, `updated_at`)
+                    VALUES ($roleId, $userId, '$now', '$now')";
+            
+            return executeSql($pdo, $sql, "Assigning admin role to user");
+        } else {
+            echo "<p class='error'>Could not find or create admin role</p>";
+            return false;
+        }
+    } catch (Exception $e) {
+        echo "<p class='error'>Error in role assignment: " . $e->getMessage() . "</p>";
+        return false;
     }
-    
-    echo "<p class='error'>Could not find user ID or role ID</p>";
-    return false;
 }
 
 // Function to create migrations table
 function createMigrationsTable($pdo) {
     $sql = "CREATE TABLE IF NOT EXISTS `migrations` (
-        `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT,
+        `id` bigint(20) UNSIGNED NOT NULL AUTO_INCREMENT,
         `migration` varchar(255) COLLATE utf8_unicode_ci NOT NULL,
         `batch` int(11) NOT NULL,
         PRIMARY KEY (`id`)
@@ -317,13 +336,24 @@ function initializeSettings($pdo) {
         return true;
     }
     
+    // Try to detect current URL
+    $url = 'http://localhost';
+    if (isset($_SERVER['HTTP_HOST'])) {
+        $protocol = isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? 'https://' : 'http://';
+        $url = $protocol . $_SERVER['HTTP_HOST'];
+    } else if (getenv('APP_URL')) {
+        $url = getenv('APP_URL');
+    } else if (getenv('RAILWAY_STATIC_URL')) {
+        $url = getenv('RAILWAY_STATIC_URL');
+    }
+    
     $now = date('Y-m-d H:i:s');
     $sql = "INSERT INTO `settings_system` 
         (`status`, `url`, `name`, `department`, `page_size`, `log_level`, 
         `purge_log`, `name_format`, `time_farmat`, `date_format`, 
         `date_time_format`, `day_date_time`, `time_zone`, `content`, `created_at`, `updated_at`) 
         VALUES 
-        (1, 'http://localhost', 'Faveo HELPDESK', 'Support', '10', 'error', 
+        (1, '$url', 'Faveo HELPDESK', 'Support', '10', 'error', 
         'never', 'first_last', 12, 1, 
         1, 'date_first', 'UTC', 'application/json', '$now', '$now')";
     

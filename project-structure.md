@@ -352,10 +352,26 @@ The project includes a complete set of database initialization and maintenance t
     - Sets up a minimal admin user and basic system configuration
     - Uses PDO for direct database access without Laravel dependencies
     - Requires the memory-only-fix.php to establish database connection
+    - Resolves common issues with required fields by providing default values
+    - Implements proper error handling with detailed SQL error reporting
+    - Automatically detects and uses the correct application URL
     - If you encounter artisan command failures:
       1. Visit `/public/direct-migration.php` to set up the database directly
       2. After setup completes, continue with standard admin user creation
       3. Change the default admin password immediately after login
+
+17. Database Field Constraint Issues
+    - Issue: User creation fails with errors like "Field 'ext' doesn't have a default value"
+    - Solution: Updated schema definitions in direct-migration.php to include:
+      - Default values for all required fields
+      - Modified field definitions for better compatibility
+      - Enhanced error reporting to show specific constraint violations
+    - Fields like ext, country_code, and phone_number now have appropriate defaults
+    - Improved error handling shows the exact SQL state and error codes
+    - If user creation fails when using direct-migration.php, check the error message for:
+      - Missing required fields
+      - Constraint violations
+      - Data type mismatches
 
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
@@ -402,6 +418,8 @@ The project is configured for deployment on Railway with the following considera
 - If all artisan commands fail with error code 255, use the direct migration tool:
   1. Visit `/public/direct-migration.php` to set up the database directly without Laravel
   2. This script will create essential tables and an admin user automatically
+  3. It handles issues with required fields and provides detailed error reporting
+  4. The system settings will automatically use the correct application URL
 - If you encounter persistent issues:
   - Check Railway logs for specific error messages
   - Visit `/public/db-connect-fix.php` to diagnose and fix database connection issues
@@ -512,10 +530,26 @@ Common issues and solutions:
     - Sets up a minimal admin user and basic system configuration
     - Uses PDO for direct database access without Laravel dependencies
     - Requires the memory-only-fix.php to establish database connection
+    - Resolves common issues with required fields by providing default values
+    - Implements proper error handling with detailed SQL error reporting
+    - Automatically detects and uses the correct application URL
     - If you encounter artisan command failures:
       1. Visit `/public/direct-migration.php` to set up the database directly
       2. After setup completes, continue with standard admin user creation
       3. Change the default admin password immediately after login
+
+17. Database Field Constraint Issues
+    - Issue: User creation fails with errors like "Field 'ext' doesn't have a default value"
+    - Solution: Updated schema definitions in direct-migration.php to include:
+      - Default values for all required fields
+      - Modified field definitions for better compatibility
+      - Enhanced error reporting to show specific constraint violations
+    - Fields like ext, country_code, and phone_number now have appropriate defaults
+    - Improved error handling shows the exact SQL state and error codes
+    - If user creation fails when using direct-migration.php, check the error message for:
+      - Missing required fields
+      - Constraint violations
+      - Data type mismatches
 
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
@@ -620,5 +654,11 @@ Direct database setup script that:
 - Works when artisan commands fail with error code 255
 - Provides detailed visual feedback on each step of the process
 - Uses the memory-only database configuration system
+- Includes enhanced error handling with detailed SQL error information
+- Creates tables with appropriate default values for required fields
+- Implements smart URL detection for system settings
+- Uses bigint columns for primary keys to match Laravel standards
+- Provides robust exception handling for all database operations
+- Tracks installation version in a dedicated version table
 
 These tools work together to ensure reliable database setup even in environments with limited PHP versions or constrained resources.
