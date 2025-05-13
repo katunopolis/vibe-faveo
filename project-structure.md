@@ -20,6 +20,10 @@ vibe-faveo/
     │   ├── db-direct-config.php
     │   ├── db-test.php
     │   ├── health.php
+    │   ├── run-migrations.php
+    │   ├── repair-database.php
+    │   ├── create-admin.php
+    │   ├── fix-permissions.php
     │   └── [Other public files]
     └── [Other Faveo application files]
 ```
@@ -204,6 +208,57 @@ The application includes several diagnostic PHP scripts to help troubleshoot con
 - Simple health check endpoint for Railway
 - Returns "OK" to indicate the application is running
 
+### run-migrations.php
+- Comprehensive script for setting up the Faveo database
+- Runs all necessary migrations and seeds
+- Creates required database structure
+- Shows detailed output of each command with error handling
+- Verifies database tables after migration
+
+### repair-database.php
+- Diagnostic and repair tool for database structure issues
+- Checks for required Faveo tables and creates missing ones
+- Verifies table structure and attempts to fix issues
+- Can reset and recreate the database if necessary
+- Shows comprehensive table listing
+
+### create-admin.php
+- User-friendly interface for creating an admin user
+- Tests database connectivity before showing the form
+- Can create a new admin or update an existing user account
+- Provides secure password hashing
+- Displays login credentials for immediate access
+
+### fix-permissions.php
+- Fixes common permission issues in Faveo installation
+- Shows detailed file system information
+- Sets proper ownership and permissions on critical directories
+- Creates missing directories in the Laravel storage structure
+- Clears application caches
+
+## Database Initialization
+The project includes a complete set of database initialization and maintenance tools:
+
+### Database Setup Process
+1. Run `/public/run-migrations.php` to create database tables and run initial migrations
+2. Run `/public/repair-database.php` to verify table structures and fix any issues
+3. Run `/public/create-admin.php` to create an administrator account
+4. Run `/public/fix-permissions.php` to ensure proper file permissions
+
+### Features
+- **Streamlined Setup**: Complete database setup through web interface without command line access
+- **Diagnostic Feedback**: Clear visual feedback on each step of the setup process
+- **Error Recovery**: Automatic attempts to fix common database and file permission issues
+- **User Management**: Simple admin user creation with secure password handling
+- **Self-guided Process**: Each script includes navigation links to the next steps
+
+### Technical Details
+- Scripts use PDO for database connections with proper error handling
+- Laravel artisan commands are executed through PHP's exec() function
+- Successful connection prioritizes internal Railway networking (mysql.railway.internal)
+- Fallback mechanisms ensure reliability across different deployment environments
+- File permission issues are automatically detected and corrected
+
 ## Build Issues and Solutions
 ### Known Issues
 1. Composer Dependencies
@@ -264,6 +319,7 @@ The application includes several diagnostic PHP scripts to help troubleshoot con
 10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
 11. Added smart database connection handling with auto-detection and failover
 12. Created diagnostic tools for troubleshooting connection issues
+13. Added comprehensive database initialization scripts for easy setup
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -272,6 +328,7 @@ The application includes several diagnostic PHP scripts to help troubleshoot con
 4. Use Docker Compose for local development environment
 5. Be aware of the ambiguous class resolution warnings (they're expected)
 6. Test your changes locally before deploying to Railway
+7. Use the provided database maintenance scripts when deploying to new environments
 
 ## Deployment
 The project is configured for deployment on Railway with the following considerations:
@@ -282,10 +339,16 @@ The project is configured for deployment on Railway with the following considera
 - The health check path is set to `/public/health.php` in railway.toml
 - The start command is set to `/usr/local/bin/bootstrap.sh` to ensure proper initialization
 - The bootstrap script automatically configures Apache to use the correct port
+- After deployment, follow these steps:
+  1. Visit `/public/run-migrations.php` to set up the database
+  2. Visit `/public/repair-database.php` to verify and fix database structure
+  3. Visit `/public/create-admin.php` to create an admin user
+  4. Visit `/public/fix-permissions.php` to fix any permission issues
+  5. Access Faveo at `/public` and log in with your admin credentials
 - If you encounter persistent issues:
   - Check Railway logs for specific error messages
-  - Visit /public/db-connect-fix.php to diagnose and fix database connection issues
-  - Visit /public/db-test.php to see detailed connection diagnostics
+  - Visit `/public/db-connect-fix.php` to diagnose and fix database connection issues
+  - Visit `/public/db-test.php` to see detailed connection diagnostics
 
 ## Testing
 - Unit tests should be run before deployment
@@ -298,12 +361,14 @@ Regular maintenance tasks:
 2. Clear caches
 3. Check storage permissions
 4. Verify environment configurations
+5. Run `/public/repair-database.php` periodically to check database integrity
 
 ## Security Considerations
 1. Environment variables protection
 2. File permissions management
 3. Dependency security updates
 4. API key management
+5. Change default admin credentials immediately after installation
 
 ## Performance Optimization
 1. Composer autoload optimization
@@ -357,6 +422,11 @@ Common issues and solutions:
       - Use the external hostname and port from MYSQL_PUBLIC_URL environment variable
       - The updated bootstrap.sh now automatically tries both internal and external connections
       - Visit /public/db-connect-fix.php to automatically fix connection issues
+
+13. Database Initialization Issues:
+    - Issue: Empty database after deployment
+    - Solution: Use the provided scripts in order: run-migrations.php, repair-database.php, create-admin.php, fix-permissions.php
+    - If scripts fail with permission errors, run `chmod 755 /var/www/html/public/*.php` in the Railway shell
 
 ## Future Improvements
 1. Automated dependency updates

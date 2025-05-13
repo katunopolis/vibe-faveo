@@ -155,7 +155,8 @@ if (is_dir($config_dir)) {
     $db_config_content .= "    'connections' => [\n";
     $db_config_content .= "        'mysql' => [\n";
     $db_config_content .= "            'driver' => 'mysql',\n";
-    $db_config_content .= "            'url' => env('DATABASE_URL'),\n";
+    $db_config_content .= "            'url' => env('
+    DATABASE_URL'),\n";
     $db_config_content .= "            'host' => env('DB_HOST', '{$mysql_host}'),\n";
     $db_config_content .= "            'port' => env('DB_PORT', '{$mysql_port}'),\n";
     $db_config_content .= "            'database' => env('DB_DATABASE', '{$mysql_database}'),\n";
