@@ -148,11 +148,18 @@ The application is configured for deployment on Railway with the `railway.toml` 
   - Required Nix packages: php82, php82Packages.composer
 - **Database Configuration**:
   - Uses Railway's MySQL plugin environment variables:
-    - MYSQLHOST: Host name for the database (default: mysql.railway.internal)
+    - MYSQLHOST: Host name for the database
     - MYSQLPORT: Port for the database (default: 3306)
     - MYSQLDATABASE: Database name (default: railway)
-    - MYSQLUSER: Database username (default: root)
+    - MYSQLUSER: Database username
     - MYSQLPASSWORD: Database password
+  - **IMPORTANT**: You must link the MySQL service to your app service in the Railway dashboard
+  - The bootstrap script will automatically:
+    - Debug MySQL environment variables
+    - Check if MySQL variables are available
+    - Configure database connection
+    - Test database connection
+    - Run migrations if database connection is successful
 
 ## Build Issues and Solutions
 ### Known Issues
@@ -263,6 +270,13 @@ Common issues and solutions:
 8. Apache server name warnings: These are now suppressed by setting ServerName directive in the bootstrap script
 9. Database connection issues in Railway:
    - Ensure you have added a MySQL plugin in the Railway dashboard
+   - **CRITICAL**: You must explicitly link your MySQL service to your app service in Railway:
+     1. Go to your Railway dashboard
+     2. Select your app service
+     3. Go to the "Variables" tab
+     4. Click "Connect" or "Link Service" and select your MySQL service
+     5. This ensures the environment variables are shared between services
+   - If linking doesn't work, manually copy the environment variables from MySQL service to your app service
    - Make sure the bootstrap script is using the correct environment variables for database connection:
      - MYSQLHOST instead of DB_HOST
      - MYSQLPORT instead of DB_PORT
@@ -270,6 +284,7 @@ Common issues and solutions:
      - MYSQLUSER instead of DB_USERNAME
      - MYSQLPASSWORD instead of DB_PASSWORD
    - Use /public/db-test.php to diagnose database connection issues
+   - Check deployment logs for database connection debugging information
 
 ## Future Improvements
 1. Automated dependency updates

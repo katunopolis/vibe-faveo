@@ -125,12 +125,57 @@ echo "<?php echo \"OK\"; ?>" > /var/www/html/public/health.php\n\
 # Handle Railway environment\n\
 if [ -n "$RAILWAY_ENVIRONMENT" ]; then\n\
   echo "Running in Railway environment..."\n\
-  # Set database connection using Railway environment variables\n\
-  sed -i "s/DB_HOST=.*/DB_HOST=${MYSQLHOST:-mysql.railway.internal}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_PORT=.*/DB_PORT=${MYSQLPORT:-3306}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_DATABASE=.*/DB_DATABASE=${MYSQLDATABASE:-railway}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_USERNAME=.*/DB_USERNAME=${MYSQLUSER:-root}/" /var/www/html/.env || true\n\
-  sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQLPASSWORD:-}/" /var/www/html/.env || true\n\
+  # Debug MySQL environment variables\n\
+  echo "MySQL Environment Variables:"\n\
+  echo "MYSQLHOST: ${MYSQLHOST:-not set}"\n\
+  echo "MYSQLPORT: ${MYSQLPORT:-not set}"\n\
+  echo "MYSQLDATABASE: ${MYSQLDATABASE:-not set}"\n\
+  echo "MYSQLUSER: ${MYSQLUSER:-not set}"\n\
+  echo "MYSQLPASSWORD: ${MYSQLPASSWORD:+is set}"\n\
+  \n\
+  # Check if MySQL variables are available\n\
+  if [ -n "$MYSQLHOST" ] && [ -n "$MYSQLUSER" ] && [ -n "$MYSQLPASSWORD" ]; then\n\
+    echo "MySQL environment variables found. Using them for database configuration."\n\
+    # Set database connection using Railway environment variables\n\
+    sed -i "s/DB_HOST=.*/DB_HOST=${MYSQLHOST}/" /var/www/html/.env || true\n\
+    sed -i "s/DB_PORT=.*/DB_PORT=${MYSQLPORT:-3306}/" /var/www/html/.env || true\n\
+    sed -i "s/DB_DATABASE=.*/DB_DATABASE=${MYSQLDATABASE:-railway}/" /var/www/html/.env || true\n\
+    sed -i "s/DB_USERNAME=.*/DB_USERNAME=${MYSQLUSER}/" /var/www/html/.env || true\n\
+    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=${MYSQLPASSWORD}/" /var/www/html/.env || true\n\
+    \n\
+    # Test database connection\n\
+    echo "Testing database connection..."\n\
+    if php -r "try { new PDO('mysql:host=$MYSQLHOST;port=${MYSQLPORT:-3306};dbname=${MYSQLDATABASE:-railway}', '$MYSQLUSER', '$MYSQLPASSWORD'); echo 'Connection successful!'; } catch (PDOException \$e) { echo 'Connection failed: ' . \$e->getMessage(); exit(1); }"; then\n\
+      echo "Database connection successful! Will run migrations."\n\
+      # Create a simple database migration script\n\
+      echo "<?php\n\
+      require_once __DIR__ . '/../vendor/autoload.php';\n\
+      try {\n\
+        \$conn = new PDO('mysql:host=$MYSQLHOST;port=${MYSQLPORT:-3306};dbname=${MYSQLDATABASE:-railway}', '$MYSQLUSER', '$MYSQLPASSWORD');\n\
+        \$conn->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);\n\
+        echo 'Connected to database. Running migrations...\n';\n\
+        system('cd /var/www/html && php artisan migrate --force');\n\
+        echo 'Migrations completed.\n';\n\
+      } catch(PDOException \$e) {\n\
+        echo 'Error running migrations: ' . \$e->getMessage();\n\
+      }\n\
+      ?>" > /var/www/html/public/run-migrations-now.php\n\
+      \n\
+      # Run migrations\n\
+      echo "Running migrations..."\n\
+      php /var/www/html/public/run-migrations-now.php\n\
+    else\n\
+      echo "Database connection failed. Skipping migrations."\n\
+    fi\n\
+  else\n\
+    echo "WARNING: MySQL environment variables not found. Using fallback values."\n\
+    # Use fallback values\n\
+    sed -i "s/DB_HOST=.*/DB_HOST=mysql.railway.internal/" /var/www/html/.env || true\n\
+    sed -i "s/DB_PORT=.*/DB_PORT=3306/" /var/www/html/.env || true\n\
+    sed -i "s/DB_DATABASE=.*/DB_DATABASE=railway/" /var/www/html/.env || true\n\
+    sed -i "s/DB_USERNAME=.*/DB_USERNAME=root/" /var/www/html/.env || true\n\
+    sed -i "s/DB_PASSWORD=.*/DB_PASSWORD=/" /var/www/html/.env || true\n\
+  fi\n\
   # Set trusted proxies for Railway\n\
   sed -i "s/APP_URL=.*/APP_URL=${APP_URL:-http:\/\/localhost}/" /var/www/html/.env || true\n\
   # Set Apache ServerName to suppress the warning\n\
