@@ -1,4 +1,6 @@
 <?php
+// Bootstrap the Laravel application environment
+require __DIR__.'/bootstrap-app.php';
 
 use Illuminate\Contracts\Http\Kernel;
 use Illuminate\Http\Request;

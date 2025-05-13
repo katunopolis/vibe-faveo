@@ -16,10 +16,14 @@ vibe-faveo/
 ├── project-structure.md
 └── faveo/
     ├── public/
+    │   ├── bootstrap-app.php                # Laravel bootstrapper fix
+    │   ├── facade-fix.php                   # Facade root issue fix
+    │   ├── alt-index.php                    # Alternative entry point
+    │   ├── fix-bootstrap.php                # Bootstrap fixer utility
+    │   ├── diagnose-facade.php              # Facade diagnostic tool
     │   ├── db-connect-fix.php
     │   ├── db-direct-config.php
     │   ├── db-test.php
-    │   ├── health.php
     │   ├── memory-only-fix.php
     │   ├── run-migrations.php
     │   ├── run-migrations-memory.php
@@ -185,6 +189,51 @@ The application is configured for deployment on Railway with the `railway.toml` 
     - Use the first successful connection
     - Configure the application with working connection details
 
+## Facade Root Error Fix
+The application includes several specialized scripts to deal with the common Laravel "facade root has not been set" error:
+
+### bootstrap-app.php
+- A custom Laravel bootstrapper script that fixes common bootstrapping issues
+- Should be included at the beginning of index.php
+- Sets up essential environment variables for database connection
+- Creates required storage directories if missing
+- Clears cached configurations that might be causing issues
+- Explicitly creates an application instance and sets it as the facade root
+- Can be accessed directly to view configuration status and patch index.php
+
+### facade-fix.php
+- A direct facade root fixer script that initializes the Laravel application
+- Can be included in any PHP file that needs to use Laravel facades
+- Creates a minimal application instance and sets it as the facade root
+- Initializes essential facades like App and Config
+- Implements proper error handling and prevents recursion
+- Can be accessed directly to see usage instructions
+
+### alt-index.php
+- An alternative entry point to the application that bypasses the main index.php
+- Uses facade-fix.php to ensure proper bootstrapping
+- Includes comprehensive error handling to display useful diagnostics
+- Provides links to other diagnostic tools when errors occur
+- Useful for testing when the main entry point is failing
+
+### fix-bootstrap.php
+- A comprehensive bootstrap fixing utility that addresses various bootstrapping issues
+- Patches index.php to include bootstrap-app.php if needed
+- Creates and verifies critical directories (storage, bootstrap/cache)
+- Fixes permissions on key directories and files
+- Shows detailed success and error messages
+- Provides next steps and links to other diagnostic tools
+
+### diagnose-facade.php
+- A diagnostic tool specifically for facade root issues
+- Tests Laravel framework loading
+- Tests bootstrap file integrity
+- Tests facade initialization
+- Tests storage and cache directory permissions
+- Tests environment configuration
+- Automatically applies fixes when possible
+- Provides detailed technical explanations and next steps
+
 ## Diagnostic Tools
 The application includes several diagnostic PHP scripts to help troubleshoot connection issues:
 
@@ -270,10 +319,12 @@ The project includes a complete set of database initialization and maintenance t
 
 2. Laravel Key Generation
    - Issue: Facade root not set
-   - Solution: Moved Laravel initialization to direct file operations instead of artisan commands
-   - Added new `db-fixed.php` script that provides proper database bootstrapping without facade errors
-   - Created direct Laravel application bootstrapping in `run-migrations.php` to avoid facade errors
-   - Added fallback mechanisms to handle facade root errors gracefully
+   - Solution: 
+     - Moved Laravel initialization to direct file operations instead of artisan commands
+     - Added bootstrap-app.php to fix the facade root issue at application startup
+     - Created facade-fix.php for direct façade root initialization
+     - Implemented alternative entry points (alt-index.php) for better diagnostics
+     - Added diagnose-facade.php for comprehensive diagnosis and fixes
 
 3. Docker Compose Version
    - Issue: Obsolete version attribute warning
@@ -373,6 +424,16 @@ The project includes a complete set of database initialization and maintenance t
       - Constraint violations
       - Data type mismatches
 
+18. Laravel Facade Root Error
+    - Issue: "A facade root has not been set" error when accessing the application
+    - Solutions:
+      - Visit `/public/diagnose-facade.php` to run diagnostics and apply fixes
+      - Use `/public/fix-bootstrap.php` to patch index.php and fix permissions
+      - Ensure bootstrap-app.php is included at the beginning of index.php
+      - Try accessing the application through `/public/alt-index.php`
+      - Check that storage and bootstrap/cache directories have proper permissions
+      - Clear Laravel configuration cache if needed
+
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
 2. Used direct file operations instead of artisan commands for cache clearing
@@ -387,6 +448,9 @@ The project includes a complete set of database initialization and maintenance t
 11. Added smart database connection handling with auto-detection and failover
 12. Created diagnostic tools for troubleshooting connection issues
 13. Added comprehensive database initialization scripts for easy setup
+14. Implemented facade root initialization to prevent common Laravel errors
+15. Created alternative entry points for better error handling and diagnostics
+16. Added diagnostic tools for facade-related issues and bootstrapping problems
 
 ## Development Guidelines
 1. Always run `composer update` after modifying composer.json
@@ -396,6 +460,7 @@ The project includes a complete set of database initialization and maintenance t
 5. Be aware of the ambiguous class resolution warnings (they're expected)
 6. Test your changes locally before deploying to Railway
 7. Use the provided database maintenance scripts when deploying to new environments
+8. If encountering facade root errors, use the diagnostic tools provided
 
 ## Deployment
 The project is configured for deployment on Railway with the following considerations:
@@ -420,6 +485,10 @@ The project is configured for deployment on Railway with the following considera
   2. This script will create essential tables and an admin user automatically
   3. It handles issues with required fields and provides detailed error reporting
   4. The system settings will automatically use the correct application URL
+- If you encounter facade root errors:
+  1. Visit `/public/diagnose-facade.php` to diagnose and fix facade-related issues
+  2. Visit `/public/fix-bootstrap.php` to patch index.php and fix permissions
+  3. If the main application still doesn't work, try `/public/alt-index.php` as an alternative entry point
 - If you encounter persistent issues:
   - Check Railway logs for specific error messages
   - Visit `/public/db-connect-fix.php` to diagnose and fix database connection issues
@@ -458,7 +527,11 @@ Common issues and solutions:
 3. Cache issues: Use direct file operations to clear Laravel cache files
 4. Environment issues: Verify .env configuration matches expected environment variables
 5. Docker build issues: Use `docker-compose down` followed by `docker-compose up --build`
-6. Laravel facade errors: Expected in Faveo application - these can be bypassed using direct file operations
+6. Laravel facade errors: 
+   - Visit `/public/diagnose-facade.php` to diagnose and fix facade root issues
+   - Make sure bootstrap-app.php is included at the beginning of index.php
+   - Try accessing the application through alt-index.php
+   - If issues persist, check storage and bootstrap/cache directory permissions
 7. Railway deployment issues:
    - Verify health check is configured to use `/public/health.php` in railway.toml
    - Ensure start command is set to `/usr/local/bin/bootstrap.sh` in railway.toml
@@ -550,23 +623,18 @@ Common issues and solutions:
       - Missing required fields
       - Constraint violations
       - Data type mismatches
+      
+18. Laravel Facade Root Error
+    - Issue: "A facade root has not been set" error when accessing the application
+    - Solutions:
+      - Visit `/public/diagnose-facade.php` to run diagnostics and apply fixes
+      - Use `/public/fix-bootstrap.php` to patch index.php and fix permissions
+      - Ensure bootstrap-app.php is included at the beginning of index.php
+      - Try accessing the application through `/public/alt-index.php`
+      - Check that storage and bootstrap/cache directories have proper permissions
+      - Clear Laravel configuration cache if needed
 
-### Build Process Improvements
-1. Created a bootstrap script for runtime initialization
-2. Used direct file operations instead of artisan commands for cache clearing
-3. Added pre-generated application key to avoid key generation issues
-4. Created required storage directories explicitly
-5. Added Railway environment detection and configuration
-6. Improved webpack configuration to handle missing assets
-7. Added health check endpoint for monitoring
-8. Set Apache ServerName configuration to suppress warnings
-9. Updated railway.toml to use the bootstrap script as the start command
-10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
-11. Added smart database connection handling with auto-detection and failover
-12. Created diagnostic tools for troubleshooting connection issues
-13. Added comprehensive database initialization scripts for easy setup
-
-## Memory-Only Fix Solution
+### Memory-Only Fix Solution
 The project includes a special set of memory-only tools to handle deployment environments with restricted file permissions:
 
 ### memory-only-fix.php
@@ -600,65 +668,6 @@ These tools work together to ensure reliable database setup even in environments
 8. Add more comprehensive diagnostic tools for other common issues
 9. Create additional memory-only versions of other maintenance tools (repair-database, create-admin, fix-permissions)
 10. Add support for more database connection methods in memory-only tools
-
-### Database Setup Tools
-The project now includes several improved database configuration and setup tools:
-
-#### db-fixed.php
-A simplified, backward-compatible database helper for older PHP versions that:
-- Tests multiple connection methods automatically
-- Finds and uses the first working database connection
-- Creates a bootstrap file with proper database configuration
-- Shows detailed diagnostic information
-- Streamlines the setup of run-migrations.php
-
-#### db-direct-config.php
-A more advanced database configuration helper that:
-- Detects the best database connection method
-- Tests connections and provides detailed feedback
-- Creates configuration files for Laravel to use
-- Handles various connection sources (env vars, DATABASE_URL, Railway vars)
-- Generates bootstrap files to ensure proper database configuration
-
-#### run-migrations.php
-Enhanced migration script that:
-- Uses DB helpers to establish a reliable database connection
-- Properly bootstraps Laravel to avoid facade root errors
-- Runs migrations directly through the Laravel kernel when possible
-- Falls back to artisan commands with increased memory limits when needed
-- Provides detailed feedback on the migration process
-- Shows database tables after completion
-
-#### memory-only-fix.php
-Zero-footprint database configuration helper that:
-- Works entirely in memory without writing any files to disk
-- Tests multiple connection methods automatically
-- Sets database configuration using $_ENV, putenv() and $GLOBALS
-- Provides detailed connection diagnostic information
-- Returns connection results for use in other scripts
-
-#### run-migrations-memory.php
-Memory-only version of the migration script that:
-- Uses the memory-only configuration helper to avoid file permission issues
-- Creates a stub for Excel dependency to fix missing package errors
-- Runs database commands with increased memory limits
-- Handles migration failures gracefully with detailed error reporting
-- Verifies database tables after migration
-
-#### direct-migration.php
-Direct database setup script that:
-- Bypasses Laravel framework and artisan commands completely
-- Creates essential database tables using direct SQL queries
-- Creates a minimal admin user account with role assignment
-- Initializes system settings with default values
-- Works when artisan commands fail with error code 255
-- Provides detailed visual feedback on each step of the process
-- Uses the memory-only database configuration system
-- Includes enhanced error handling with detailed SQL error information
-- Creates tables with appropriate default values for required fields
-- Implements smart URL detection for system settings
-- Uses bigint columns for primary keys to match Laravel standards
-- Provides robust exception handling for all database operations
-- Tracks installation version in a dedicated version table
-
-These tools work together to ensure reliable database setup even in environments with limited PHP versions or constrained resources.
+11. Implement better error reporting in facade diagnostic scripts
+12. Streamline the bootstrapping process to eliminate redundancy
+13. Improve the user interface of diagnostic tools for better usability
