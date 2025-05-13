@@ -12,9 +12,20 @@ error_reporting(E_ALL);
 
 // Include our db-direct-config helper
 $SKIP_HEADER = true; // Skip HTML output from the helper
-$db_config = include __DIR__ . '/db-direct-config.php';
-if (!$db_config['success']) {
-    die("<p class='error'>Error connecting to database: " . $db_config['error'] . "</p>");
+try {
+    // First try the simplified version that is compatible with older PHP versions
+    if (file_exists(__DIR__ . '/db-fixed.php')) {
+        $db_config = include __DIR__ . '/db-fixed.php';
+    } else {
+        // Fall back to the original version
+        $db_config = include __DIR__ . '/db-direct-config.php';
+    }
+    
+    if (!$db_config['success']) {
+        die("<p class='error'>Error connecting to database: " . $db_config['message'] . "</p>");
+    }
+} catch (Exception $e) {
+    die("<p class='error'>Failed to load database configuration: " . $e->getMessage() . "</p>");
 }
 
 // Define application path
@@ -51,9 +62,17 @@ For security reasons, please delete this file after you've successfully set up y
 
 // Database connection info
 echo "<h2>Database Connection Information</h2>";
-echo "<p>Connected to <strong>{$db_config['connection']['host']}:{$db_config['connection']['port']}</strong> as <strong>{$db_config['connection']['username']}</strong></p>";
-echo "<p>Database: <strong>{$db_config['connection']['database']}</strong></p>";
-echo "<p>Connection source: <strong>{$db_config['connection']['source']}</strong></p>";
+if (isset($db_config['connection']['host'])) {
+    // New format from db-fixed.php
+    echo "<p>Connected to <strong>{$db_config['connection']['host']}:{$db_config['connection']['port']}</strong> as <strong>{$db_config['connection']['username']}</strong></p>";
+    echo "<p>Database: <strong>{$db_config['connection']['database']}</strong></p>";
+    echo "<p>Connection source: <strong>{$db_config['connection']['method']}</strong></p>";
+} else {
+    // Old format from db-direct-config.php
+    echo "<p>Connected to <strong>{$db_config['connection']['host']}:{$db_config['connection']['port']}</strong> as <strong>{$db_config['connection']['username']}</strong></p>";
+    echo "<p>Database: <strong>{$db_config['connection']['database']}</strong></p>";
+    echo "<p>Connection source: <strong>{$db_config['connection']['source']}</strong></p>";
+}
 
 // Run the migration commands
 echo "<h2>Running Migrations</h2>";
@@ -163,7 +182,14 @@ try {
 echo "<h2>Checking Tables</h2>";
 
 try {
-    $stmt = $db_config['pdo']->query('SHOW TABLES');
+    // Get PDO from the correct location depending on which helper was used
+    $pdo = isset($db_config['pdo']) ? $db_config['pdo'] : $db_config['connection']['pdo'];
+    
+    if (!$pdo) {
+        throw new Exception("No active database connection available");
+    }
+    
+    $stmt = $pdo->query('SHOW TABLES');
     $tables = $stmt->fetchAll(PDO::FETCH_COLUMN);
     
     echo "<p>Tables found: " . count($tables) . "</p>";
@@ -178,6 +204,8 @@ try {
     }
 } catch (PDOException $e) {
     echo "<p class='error'>Error checking tables: " . $e->getMessage() . "</p>";
+} catch (Exception $e) {
+    echo "<p class='error'>Error: " . $e->getMessage() . "</p>";
 }
 
 echo "<h2>Next Steps</h2>";

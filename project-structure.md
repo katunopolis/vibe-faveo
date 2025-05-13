@@ -268,6 +268,9 @@ The project includes a complete set of database initialization and maintenance t
 2. Laravel Key Generation
    - Issue: Facade root not set
    - Solution: Moved Laravel initialization to direct file operations instead of artisan commands
+   - Added new `db-fixed.php` script that provides proper database bootstrapping without facade errors
+   - Created direct Laravel application bootstrapping in `run-migrations.php` to avoid facade errors
+   - Added fallback mechanisms to handle facade root errors gracefully
 
 3. Docker Compose Version
    - Issue: Obsolete version attribute warning
@@ -305,6 +308,27 @@ The project includes a complete set of database initialization and maintenance t
     - Issue: Internal hostname mysql.railway.internal not resolving properly
     - Solution: Added support for external hostname/port from MYSQL_PUBLIC_URL environment variable 
     - Added auto-detection and failover between internal and external connection methods
+
+12. Railway MySQL Connection Issues
+    - Issue: mysql.railway.internal hostname not resolving in Railway environment
+    - Solutions:
+      - Ensure MySQL plugin is properly linked to your app service
+      - Use the external hostname and port from MYSQL_PUBLIC_URL environment variable
+      - The updated bootstrap.sh now automatically tries both internal and external connections
+      - Visit /public/db-connect-fix.php to automatically fix connection issues
+
+13. Database Initialization Issues
+    - Issue: Empty database after deployment
+    - Solution: Use the provided scripts in order: run-migrations.php, repair-database.php, create-admin.php, fix-permissions.php
+    - If scripts fail with permission errors, run `chmod 755 /var/www/html/public/*.php` in the Railway shell
+
+14. PHP Version Compatibility
+    - Issue: Syntax errors due to newer PHP features used in scripts
+    - Solution: Added backward compatible `db-fixed.php` file that works on older PHP versions
+    - Replaced nullish coalescing operator (??) with traditional isset() checks
+    - Modified heredoc syntax for PHP 5.x compatibility
+    - Used array() syntax instead of [] shorthand for older PHP compatibility
+    - Created simplified bootstrapping procedure with older version support
 
 ### Build Process Improvements
 1. Created a bootstrap script for runtime initialization
@@ -428,6 +452,14 @@ Common issues and solutions:
     - Solution: Use the provided scripts in order: run-migrations.php, repair-database.php, create-admin.php, fix-permissions.php
     - If scripts fail with permission errors, run `chmod 755 /var/www/html/public/*.php` in the Railway shell
 
+14. PHP Version Compatibility:
+    - Issue: Syntax errors due to newer PHP features used in scripts
+    - Solution: Added backward compatible `db-fixed.php` file that works on older PHP versions
+    - Replaced nullish coalescing operator (??) with traditional isset() checks
+    - Modified heredoc syntax for PHP 5.x compatibility
+    - Used array() syntax instead of [] shorthand for older PHP compatibility
+    - Created simplified bootstrapping procedure with older version support
+
 ## Future Improvements
 1. Automated dependency updates
 2. Enhanced error handling
@@ -437,3 +469,33 @@ Common issues and solutions:
 6. Create a dedicated Railway configuration section in the bootstrap script
 7. Implement proper Laravel Mix asset compilation
 8. Add more comprehensive diagnostic tools for other common issues
+
+### Database Setup Tools
+The project now includes several improved database configuration and setup tools:
+
+#### db-fixed.php
+A simplified, backward-compatible database helper for older PHP versions that:
+- Tests multiple connection methods automatically
+- Finds and uses the first working database connection
+- Creates a bootstrap file with proper database configuration
+- Shows detailed diagnostic information
+- Streamlines the setup of run-migrations.php
+
+#### db-direct-config.php
+A more advanced database configuration helper that:
+- Detects the best database connection method
+- Tests connections and provides detailed feedback
+- Creates configuration files for Laravel to use
+- Handles various connection sources (env vars, DATABASE_URL, Railway vars)
+- Generates bootstrap files to ensure proper database configuration
+
+#### run-migrations.php
+Enhanced migration script that:
+- Uses DB helpers to establish a reliable database connection
+- Properly bootstraps Laravel to avoid facade root errors
+- Runs migrations directly through the Laravel kernel when possible
+- Falls back to artisan commands with increased memory limits when needed
+- Provides detailed feedback on the migration process
+- Shows database tables after completion
+
+These tools work together to ensure reliable database setup even in environments with limited PHP versions or constrained resources.

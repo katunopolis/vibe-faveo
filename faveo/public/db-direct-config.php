@@ -74,11 +74,11 @@ function detectBestDatabaseConnection() {
         try {
             $parsed = parse_url($database_url);
             if ($parsed) {
-                $connection['host'] = $parsed['host'] ?? 'localhost';
-                $connection['port'] = $parsed['port'] ?? '3306';
-                $connection['database'] = ltrim($parsed['path'] ?? '', '/');
-                $connection['username'] = $parsed['user'] ?? 'root';
-                $connection['password'] = $parsed['pass'] ?? '';
+                $connection['host'] = isset($parsed['host']) ? $parsed['host'] : 'localhost';
+                $connection['port'] = isset($parsed['port']) ? $parsed['port'] : '3306';
+                $connection['database'] = ltrim(isset($parsed['path']) ? $parsed['path'] : '', '/');
+                $connection['username'] = isset($parsed['user']) ? $parsed['user'] : 'root';
+                $connection['password'] = isset($parsed['pass']) ? $parsed['pass'] : '';
                 $connection['source'] = 'DATABASE_URL';
                 return $connection;
             }
@@ -185,8 +185,7 @@ if (php_sapi_name() !== 'cli' && !isset($SKIP_HEADER)) {
 
 // Generate bootstrap file
 $bootstrap_file_path = __DIR__ . '/db_bootstrap.php';
-$bootstrap_content = <<<EOT
-<?php
+$bootstrap_content = "<?php
 // Direct database configuration for Laravel - auto-generated
 
 // Force database configuration through Laravel Config system
@@ -207,7 +206,7 @@ putenv('DB_PASSWORD={$db_connection['password']}');
 
 // Override Laravel Database config directly
 if (!function_exists('config') && !isset(\$SKIP_CONFIG_OVERRIDE)) {
-    \$GLOBALS['db_config_override'] = [
+    \$GLOBALS['db_config_override'] = array(
         'driver' => '{$db_connection['driver']}',
         'host' => '{$db_connection['host']}',
         'port' => '{$db_connection['port']}',
@@ -217,11 +216,11 @@ if (!function_exists('config') && !isset(\$SKIP_CONFIG_OVERRIDE)) {
         'charset' => '{$db_connection['charset']}',
         'collation' => '{$db_connection['collation']}',
         'prefix' => '{$db_connection['prefix']}',
-        'strict' => {$db_connection['strict'] ? 'true' : 'false'},
-        'engine' => null,
-    ];
+        'strict' => " . ($db_connection['strict'] ? 'true' : 'false') . ",
+        'engine' => null
+    );
 }
-EOT;
+";
 
 // Write bootstrap file
 $write_success = false;
@@ -234,8 +233,7 @@ try {
 
 // Create patch file for index.php to load our bootstrap before Laravel
 $index_patch_path = __DIR__ . '/index_patch.php';
-$index_patch_content = <<<EOT
-<?php
+$index_patch_content = "<?php
 // Patched index.php for Faveo to include direct database config
 // Include the bootstrap file for direct database configuration
 \$db_bootstrap_file = __DIR__ . '/db_bootstrap.php';
@@ -245,7 +243,7 @@ if (file_exists(\$db_bootstrap_file)) {
 
 // Continue with the regular index.php content
 require __DIR__ . '/index.php';
-EOT;
+";
 
 // Write patch file
 $patch_success = false;
