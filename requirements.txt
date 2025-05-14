@@ -1,0 +1,14 @@
+# Basic requirements for the application
+# This file is required by the Dockerfile
+
+# Web framework
+fastapi>=0.68.0
+uvicorn>=0.15.0
+
+# Database
+pydantic>=1.8.0
+sqlalchemy>=1.4.0
+
+# Utilities
+python-dotenv>=0.19.0
+requests>=2.26.0 
