@@ -1,7 +1,15 @@
 #!/bin/bash
 set -e
 
+# Set Composer environment variables to prevent HOME not set errors
+export COMPOSER_HOME=/tmp/composer
+export COMPOSER_ALLOW_SUPERUSER=1
+
 echo "Running Composer..."
+# Create Composer home directory
+mkdir -p $COMPOSER_HOME
+chmod -R 777 $COMPOSER_HOME
+
 # Clear composer cache first to avoid any stale data
 composer clearcache
 

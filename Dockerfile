@@ -1,5 +1,9 @@
 FROM php:8.2-apache
 
+# Set Composer environment variables to prevent HOME not set errors
+ENV COMPOSER_HOME=/tmp/composer
+ENV COMPOSER_ALLOW_SUPERUSER=1
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     libzip-dev \
