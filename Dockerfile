@@ -26,14 +26,8 @@ WORKDIR /var/www/html
 # Copy application files
 COPY faveo /var/www/html/
 
-# Copy fix scripts
-COPY fix-bootstrap.php /var/www/html/public/
-COPY bootstrap-app.php /var/www/html/bootstrap/app.php
-COPY permanent-url-fix.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/permanent-url-fix.sh
-
-# Copy bootstrap.sh
-COPY bootstrap.sh /usr/local/bin/
+# Copy bootstrap file
+COPY bootstrap-complete.sh /usr/local/bin/bootstrap.sh
 RUN chmod +x /usr/local/bin/bootstrap.sh
 
 # Set proper permissions
