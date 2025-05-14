@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
     unzip \
     mariadb-client \
     sudo \
+    procps \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
@@ -25,6 +26,9 @@ WORKDIR /var/www/html
 
 # Copy application files
 COPY faveo /var/www/html/
+
+# Copy health check file
+COPY health.php /var/www/html/public/health.php
 
 # Copy bootstrap file
 COPY bootstrap-complete.sh /usr/local/bin/bootstrap.sh
