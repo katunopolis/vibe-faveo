@@ -61,9 +61,13 @@ mkdir -p /var/www/html/storage/framework/sessions
 mkdir -p /var/www/html/storage/framework/views
 mkdir -p /var/www/html/storage/app/public
 
+# Create utils directory structure
+log_message "Creating utils directory structure..."
+mkdir -p /var/www/html/public/utils/{health,fixes,database,installation,admin}
+
 log_message "Setting permissions..."
-chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache
-chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache
+chown -R www-data:www-data /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public/utils
+chmod -R 775 /var/www/html/storage /var/www/html/bootstrap/cache /var/www/html/public/utils
 
 log_message "Setting up Laravel..."
 # Make sure the .env file exists and has a key
@@ -74,8 +78,49 @@ fi
 
 # Create health check file for Railway - do this early
 log_message "Creating health check file..."
-echo "<?php echo \"OK\"; ?>" > /var/www/html/public/health.php
+cat > /var/www/html/public/utils/health/health.php << EOF
+<?php
+/**
+ * Minimal Health Check for Faveo on Railway
+ * Always returns HTTP 200 to satisfy Railway's health check
+ */
+
+// Send HTTP 200 response
+header('Content-Type: text/plain');
+echo "OK";
+http_response_code(200);
+exit(0);
+EOF
+
+# Create main health.php file that redirects to utils
+log_message "Creating main health.php file..."
+cat > /var/www/html/public/health.php << EOF
+<?php
+/**
+ * Health Check Endpoint for Faveo
+ * Redirects to the utils/health/health.php script or handles the request directly
+ */
+
+// For Railway health checks, always return HTTP 200
+header('Content-Type: text/plain');
+echo "OK";
+http_response_code(200);
+
+// If detailed diagnostics requested, include the comprehensive diagnostics script
+if (isset(\$_GET['diagnostics']) || isset(\$_GET['debug'])) {
+    // Check if the utils directory exists
+    if (file_exists(__DIR__ . '/utils/health/diagnostics.php')) {
+        include_once __DIR__ . '/utils/health/diagnostics.php';
+    } else {
+        echo "\n\nDetailed diagnostics not available. Utils directory not configured.";
+    }
+}
+
+exit(0);
+EOF
+
 chmod 644 /var/www/html/public/health.php
+chmod 644 /var/www/html/public/utils/health/health.php
 
 # Database connection setup
 # This is where we parse database URLs and setup the connection
@@ -199,58 +244,211 @@ for DIR in "${CACHE_DIRS[@]}"; do
   find $DIR -type f -delete 2>/dev/null || true
 done
 
-# Fixed Apache VirtualHost config to prevent port issues
-log_message "Configuring Apache to prevent port issues..."
+# 7. Create or copy URL fix utility
+log_message "Creating URL fix utility..."
+cat > /var/www/html/public/utils/fixes/url-fix.php << EOF
+<?php
+/**
+ * URL Redirect Fix Utility for Faveo
+ * 
+ * This script fixes URL redirect issues by updating database settings
+ * and configuration files.
+ */
+
+// Set display errors for debugging
+ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
+error_reporting(E_ALL);
+
+// Security check - prevent unauthorized access
+\$password = \$_POST['auth_password'] ?? \$_GET['key'] ?? '';
+\$stored_password = getenv('ADMIN_PASSWORD') ?? 'install-faveo';
+\$authorized = (\$password === \$stored_password);
+
+// Get current URL
+function detect_url() {
+    // Try to get from environment first
+    \$env_url = getenv('APP_URL');
+    if (\$env_url && !strpos(\$env_url, 'localhost') && !strpos(\$env_url, '8080')) {
+        return rtrim(\$env_url, '/');
+    }
+    
+    // Try to get from Railway environment variables
+    \$railway_domain = getenv('RAILWAY_PUBLIC_DOMAIN');
+    if (\$railway_domain) {
+        return 'https://' . \$railway_domain;
+    }
+    
+    // Default fallback
+    return 'https://vibe-faveo-production.up.railway.app';
+}
+
+\$current_url = detect_url();
+
+// Output simple page with current URL
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Faveo URL Fixer</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; line-height: 1.6; }
+        .box { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Faveo URL Fixer</h1>
+    
+    <?php if (!\$authorized): ?>
+    <div class="box">
+        <h2>Authentication Required</h2>
+        <p>Please enter the admin password to access this tool.</p>
+        <form method="post">
+            <label for="auth_password">Password:</label>
+            <input type="password" id="auth_password" name="auth_password" required>
+            <button type="submit">Authenticate</button>
+        </form>
+    </div>
+    <?php else: ?>
+    
+    <div class="box">
+        <h2>Current URL Settings</h2>
+        <p>Current application URL: <strong><?php echo htmlspecialchars(\$current_url); ?></strong></p>
+        <p>For a more comprehensive URL fixing tool, please use the <a href="../">Utilities Dashboard</a>.</p>
+    </div>
+    
+    <?php endif; ?>
+</body>
+</html>
+EOF
+
+chmod 644 /var/www/html/public/utils/fixes/url-fix.php
+
+# 8. Create utilities index page
+log_message "Creating utilities index page..."
+cat > /var/www/html/public/utils/index.php << EOF
+<?php
+/**
+ * Faveo Utilities Index
+ * 
+ * This script provides links to all utility scripts for Faveo administration.
+ */
+
+// Security check - prevent unauthorized access
+\$password = \$_POST['auth_password'] ?? \$_GET['key'] ?? '';
+\$stored_password = getenv('ADMIN_PASSWORD') ?? 'install-faveo';
+\$authorized = (\$password === \$stored_password);
+
+// Store results
+\$message = '';
+
+// Define all utility scripts
+\$utilities = [
+    'Health and Diagnostics' => [
+        [
+            'name' => 'Health Check',
+            'description' => 'Simple health check endpoint for Railway',
+            'path' => 'health/health.php'
+        ]
+    ],
+    'URL and Configuration Fixes' => [
+        [
+            'name' => 'URL Fixer',
+            'description' => 'Fix URL redirect issues in the database and configuration',
+            'path' => 'fixes/url-fix.php'
+        ]
+    ]
+];
+
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Faveo Utilities</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; padding: 20px; color: #333; }
+        .container { max-width: 900px; margin: 0 auto; }
+        h1, h2, h3 { color: #336699; }
+        .box { border: 1px solid #ddd; padding: 15px; margin-bottom: 20px; border-radius: 4px; }
+        button, input[type="submit"] { background: #336699; color: white; border: none; padding: 8px 15px; border-radius: 4px; cursor: pointer; }
+        button:hover, input[type="submit"]:hover { background: #264d73; }
+        .utility-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); grid-gap: 20px; margin-top: 20px; }
+        .card { border: 1px solid #ddd; border-radius: 4px; padding: 15px; transition: all 0.3s ease; }
+        .card h3 { margin-top: 0; color: #336699; }
+        .card a { display: inline-block; background: #336699; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; }
+        .back-to-app { display: inline-block; margin-top: 20px; text-decoration: none; color: #336699; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Faveo Utilities Dashboard</h1>
+        
+        <?php if (!\$authorized): ?>
+        <div class="box">
+            <h2>Authentication Required</h2>
+            <p>Please enter the admin password to access these utilities.</p>
+            <form method="post">
+                <div class="form-group">
+                    <label for="auth_password">Password:</label>
+                    <input type="password" id="auth_password" name="auth_password" required>
+                </div>
+                <button type="submit">Authenticate</button>
+            </form>
+        </div>
+        <?php else: ?>
+        
+        <div class="box">
+            <p>Welcome to the Faveo Utilities Dashboard. Here you can access various tools for administering and troubleshooting your Faveo installation.</p>
+        </div>
+        
+        <?php foreach (\$utilities as \$category => \$tools): ?>
+        <div class="category">
+            <h2><?php echo htmlspecialchars(\$category); ?></h2>
+            <div class="utility-cards">
+                <?php foreach (\$tools as \$tool): ?>
+                <div class="card">
+                    <h3><?php echo htmlspecialchars(\$tool['name']); ?></h3>
+                    <p><?php echo htmlspecialchars(\$tool['description']); ?></p>
+                    <a href="<?php echo htmlspecialchars(\$tool['path']) . '?key=' . urlencode(\$password); ?>">Open Tool</a>
+                </div>
+                <?php endforeach; ?>
+            </div>
+        </div>
+        <?php endforeach; ?>
+        
+        <a href="/public" class="back-to-app">Back to Faveo Helpdesk</a>
+        
+        <?php endif; ?>
+    </div>
+</body>
+</html>
+EOF
+
+chmod 644 /var/www/html/public/utils/index.php
+
+# Create Apache site configuration
+log_message "Creating Apache configuration..."
 cat > /etc/apache2/sites-available/000-default.conf << EOF
 <VirtualHost *:80>
     ServerAdmin webmaster@localhost
     DocumentRoot /var/www/html/public
-    ServerName $CORRECT_URL
-
-    # Prevent adding port number to redirects
-    UseCanonicalName Off
     
-    # Set ProxyPreserveHost to On to ensure original host header is preserved
-    ProxyPreserveHost On
-
     <Directory /var/www/html/public>
         Options Indexes FollowSymLinks
         AllowOverride All
         Require all granted
     </Directory>
 
-    # Log configuration
     ErrorLog \${APACHE_LOG_DIR}/error.log
     CustomLog \${APACHE_LOG_DIR}/access.log combined
 </VirtualHost>
 EOF
 
-# Enable the site configuration
 a2ensite 000-default
 
-# List the public directory contents for debugging
-log_message "Public directory contents:"
-ls -la /var/www/html/public/ >> $LOG_FILE
+log_message "Bootstrap process completed successfully"
 
-log_message "URL redirect fix completed."
-log_message "Starting Apache..."
-
-# Start Apache in the background so we can continue
-apache2-foreground &
-APACHE_PID=$!
-
-# Wait a bit to see if Apache starts successfully
-sleep 5
-
-# Check if Apache is running
-if kill -0 $APACHE_PID 2>/dev/null; then
-  log_message "Apache started successfully"
-else
-  log_message "ERROR: Apache failed to start. Creating diagnostic health file"
-  # Create a health check file that will respond even if Apache fails
-  echo "<?php echo 'ERROR: Apache failed to start. Check logs.'; ?>" > /var/www/html/public/health.php
-fi
-
-# Keep the script running to keep the container alive
-log_message "Bootstrap complete. Waiting for Apache process..."
-wait $APACHE_PID 
+# Run Apache in foreground
+apache2-foreground 

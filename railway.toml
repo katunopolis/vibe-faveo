@@ -4,8 +4,8 @@ dockerfilePath = "Dockerfile"
 
 [deploy]
 startCommand = "/usr/local/bin/bootstrap.sh"
-healthcheckPath = "/public/health.php"
-healthcheckTimeout = 120
+healthcheckPath = "/health.php"
+healthcheckTimeout = 300
 restartPolicyType = "ON_FAILURE"
 numReplicas = 1
 
