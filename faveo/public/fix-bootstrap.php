@@ -1,187 +1,234 @@
 <?php
 /**
- * Faveo Bootstrap Fixer
- * 
- * This script attempts to fix common bootstrap issues with Laravel in Faveo:
- * 1. Injects bootstrap-app.php into index.php if needed
- * 2. Creates facade-fix.php if not exists
- * 3. Creates alt-index.php as an alternative entry point
- * 4. Fixes permissions on critical files
+ * This script fixes common issues with Laravel bootstrapping.
+ *
+ * It helps solve the "facade root has not been set" error by:
+ * 1. Creating necessary directories
+ * 2. Clearing cached configurations
+ * 3. Patching index.php to include bootstrap-app.php
  */
 
-// Set error reporting
+// Set display errors for debugging
 ini_set('display_errors', 1);
+ini_set('display_startup_errors', 1);
 error_reporting(E_ALL);
 
-// Define success messages
-$success_messages = [];
-$error_messages = [];
+// Define common paths
+$laravel_root = realpath(__DIR__ . '/..');
+$bootstrap_file = $laravel_root . '/bootstrap/app.php';
+$index_file = __DIR__ . '/index.php';
+$storage_dir = $laravel_root . '/storage';
+$cache_dir = $laravel_root . '/bootstrap/cache';
+$bootstrap_app_file = __DIR__ . '/bootstrap-app.php';
 
-// Check if we're running on the production server
-$is_production = (strpos($_SERVER['HTTP_HOST'] ?? '', 'railway.app') !== false);
+// Check if bootstrap-app.php exists, create if not
+if (!file_exists($bootstrap_app_file)) {
+    file_put_contents($bootstrap_app_file, '<?php
+/**
+ * This file creates a proper Laravel application instance and sets it as the facade root.
+ * Include this at the beginning of your index.php file to prevent "facade root has not been set" errors.
+ */
 
-// Function to patch files
-function patch_file($source_file, $pattern, $replacement, $file_description) {
-    global $success_messages, $error_messages;
-    
-    if (!file_exists($source_file)) {
-        $error_messages[] = "Error: $file_description file not found at: $source_file";
-        return false;
-    }
-    
-    if (!is_writable($source_file)) {
-        $error_messages[] = "Error: $file_description file is not writable: $source_file";
-        return false;
-    }
-    
-    $content = file_get_contents($source_file);
-    if (!$content) {
-        $error_messages[] = "Error: Could not read $file_description file: $source_file";
-        return false;
-    }
-    
-    // Check if already patched
-    if (strpos($content, $replacement) !== false) {
-        $success_messages[] = "$file_description file is already patched.";
-        return true;
-    }
-    
-    // Apply the patch
-    $new_content = preg_replace($pattern, $replacement, $content, 1);
-    
-    if ($new_content === null || $new_content === $content) {
-        $error_messages[] = "Error: Failed to apply patch to $file_description file.";
-        return false;
-    }
-    
-    // Write the patched content
-    if (file_put_contents($source_file, $new_content) === false) {
-        $error_messages[] = "Error: Failed to write patched $file_description file.";
-        return false;
-    }
-    
-    $success_messages[] = "Successfully patched $file_description file.";
-    return true;
+// Set display errors for debugging
+ini_set(\'display_errors\', 1);
+ini_set(\'display_startup_errors\', 1);
+error_reporting(E_ALL);
+
+// Define common paths
+$laravel_root = realpath(__DIR__ . "/..");
+$bootstrap_file = $laravel_root . "/bootstrap/app.php";
+$storage_dir = $laravel_root . "/storage";
+$cache_dir = $laravel_root . "/bootstrap/cache";
+
+// Create critical directories if they don\'t exist
+if (!is_dir($storage_dir)) {
+    mkdir($storage_dir, 0755, true);
 }
 
-// Function to create a file if it doesn't exist
-function create_file_if_not_exists($target_file, $content, $file_description) {
-    global $success_messages, $error_messages;
-    
-    if (file_exists($target_file)) {
-        $success_messages[] = "$file_description file already exists.";
-        return true;
-    }
-    
-    $dir = dirname($target_file);
-    if (!is_writable($dir)) {
-        $error_messages[] = "Error: Directory is not writable: $dir";
-        return false;
-    }
-    
-    if (file_put_contents($target_file, $content) === false) {
-        $error_messages[] = "Error: Failed to create $file_description file.";
-        return false;
-    }
-    
-    chmod($target_file, 0644); // Make file readable
-    
-    $success_messages[] = "Successfully created $file_description file.";
-    return true;
-}
-
-// Check all scripts exist
-$script_files = [
-    'bootstrap-app.php',
-    'facade-fix.php',
-    'alt-index.php',
-    'db-test.php',
-    'memory-only-fix.php',
-    'direct-migration.php',
-    'run-migrations.php',
-    'fix-permissions.php'
+$storage_subdirs = [
+    "/framework/cache/data",
+    "/framework/sessions",
+    "/framework/views",
+    "/logs",
+    "/app/public"
 ];
 
-foreach ($script_files as $script) {
-    if (!file_exists(__DIR__ . '/' . $script)) {
-        $error_messages[] = "Warning: $script does not exist. Some functionality may not work.";
+foreach ($storage_subdirs as $subdir) {
+    $dir = $storage_dir . $subdir;
+    if (!is_dir($dir)) {
+        mkdir($dir, 0755, true);
     }
 }
 
-// Fix 1: Patch index.php to include bootstrap-app.php
-$index_file = __DIR__ . '/index.php';
-$bootstrap_include = "// Bootstrap the Laravel application environment\nrequire __DIR__.'/bootstrap-app.php';";
-$patched_index = patch_file(
-    $index_file, 
-    '/<\?php/', 
-    "<?php\n$bootstrap_include\n", 
-    'index.php'
-);
+if (!is_dir($cache_dir)) {
+    mkdir($cache_dir, 0755, true);
+}
 
-// Fix 2: Test accessing the production site with the alternate index
-$alt_index_url = str_replace('fix-bootstrap.php', 'alt-index.php', $_SERVER['REQUEST_URI']);
-$base_url = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on' ? "https" : "http") . "://" . $_SERVER['HTTP_HOST'];
-
-// Fix 3: Set permissions on critical directories
-$storage_path = realpath(__DIR__ . '/../storage');
-$bootstrap_path = realpath(__DIR__ . '/../bootstrap');
-
-if ($storage_path) {
-    if (is_writable($storage_path)) {
-        $success_messages[] = "Storage directory is writable.";
+// Attempt to create Laravel application instance
+try {
+    // Check if bootstrap file exists
+    if (file_exists($bootstrap_file)) {
+        // Load bootstrap file
+        $app = require_once $bootstrap_file;
         
-        // Make sure critical subdirectories exist
-        $storage_dirs = [
-            'app',
-            'app/public',
-            'framework',
-            'framework/cache',
-            'framework/sessions',
-            'framework/views',
-            'logs'
-        ];
-        
-        foreach ($storage_dirs as $dir) {
-            $full_path = $storage_path . '/' . $dir;
-            if (!file_exists($full_path)) {
-                if (@mkdir($full_path, 0755, true)) {
-                    $success_messages[] = "Created directory: $dir";
-                } else {
-                    $error_messages[] = "Failed to create directory: $dir";
-                }
+        // Manually set the facade root
+        if (class_exists("Illuminate\\Support\\Facades\\Facade")) {
+            Illuminate\\Support\\Facades\\Facade::setFacadeApplication($app);
+            
+            // Initialize key facades
+            if (class_exists("Illuminate\\Support\\Facades\\App")) {
+                Illuminate\\Support\\Facades\\App::getFacadeRoot();
+            }
+            
+            if (class_exists("Illuminate\\Support\\Facades\\Config")) {
+                Illuminate\\Support\\Facades\\Config::getFacadeRoot();
             }
         }
-    } else {
-        $error_messages[] = "Warning: Storage directory is not writable: $storage_path";
+    }
+} catch (Exception $e) {
+    // Don\'t throw errors here as we\'re trying to fix errors
+    // Just continue with normal bootstrap process
+}
+
+// Setup environment variables for database connection using already defined connections
+$database_host = getenv("DB_HOST") ?: "localhost";
+$database_port = getenv("DB_PORT") ?: "3306";
+$database_name = getenv("DB_DATABASE") ?: "faveo";
+$database_user = getenv("DB_USERNAME") ?: "root";
+$database_pass = getenv("DB_PASSWORD") ?: "";
+
+// Set DB environment variables
+$_ENV["DB_CONNECTION"] = "mysql";
+$_ENV["DB_HOST"] = $database_host;
+$_ENV["DB_PORT"] = $database_port;
+$_ENV["DB_DATABASE"] = $database_name;
+$_ENV["DB_USERNAME"] = $database_user;
+$_ENV["DB_PASSWORD"] = $database_pass;
+
+putenv("DB_CONNECTION=mysql");
+putenv("DB_HOST=" . $database_host);
+putenv("DB_PORT=" . $database_port);
+putenv("DB_DATABASE=" . $database_name);
+putenv("DB_USERNAME=" . $database_user);
+putenv("DB_PASSWORD=" . $database_pass);
+
+// Prevent further errors by cleaning cached configuration
+$cache_files = glob($cache_dir . "/*.php");
+foreach ($cache_files as $file) {
+    if (is_file($file)) {
+        @unlink($file);
     }
 }
 
-if ($bootstrap_path) {
-    if (is_writable($bootstrap_path)) {
-        $success_messages[] = "Bootstrap directory is writable.";
+// Return true to indicate inclusion was successful
+return true;
+');
+}
+
+// Results array to store success/failure messages
+$results = [
+    'success' => [],
+    'error' => []
+];
+
+// Create critical directories
+if (!is_dir($storage_dir)) {
+    if (mkdir($storage_dir, 0755, true)) {
+        $results['success'][] = "Created storage directory";
+    } else {
+        $results['error'][] = "Failed to create storage directory";
+    }
+}
+
+$storage_subdirs = [
+    "/framework/cache/data",
+    "/framework/sessions",
+    "/framework/views",
+    "/logs",
+    "/app/public"
+];
+
+foreach ($storage_subdirs as $subdir) {
+    $dir = $storage_dir . $subdir;
+    if (!is_dir($dir)) {
+        if (mkdir($dir, 0755, true)) {
+            $results['success'][] = "Created directory: {$subdir}";
+        } else {
+            $results['error'][] = "Failed to create directory: {$subdir}";
+        }
+    }
+}
+
+if (!is_dir($cache_dir)) {
+    if (mkdir($cache_dir, 0755, true)) {
+        $results['success'][] = "Created bootstrap/cache directory";
+    } else {
+        $results['error'][] = "Failed to create bootstrap/cache directory";
+    }
+}
+
+// Fix permissions
+$dirs_to_fix = [
+    $storage_dir,
+    $cache_dir
+];
+
+foreach ($dirs_to_fix as $dir) {
+    if (is_dir($dir)) {
+        if (chmod($dir, 0755)) {
+            $results['success'][] = "Fixed permissions for: " . basename($dir);
+        } else {
+            $results['error'][] = "Failed to fix permissions for: " . basename($dir);
+        }
+    }
+}
+
+// Clear cache files
+$cache_files = glob($cache_dir . "/*.php");
+foreach ($cache_files as $file) {
+    if (is_file($file)) {
+        if (unlink($file)) {
+            $results['success'][] = "Cleared cache file: " . basename($file);
+        } else {
+            $results['error'][] = "Failed to clear cache file: " . basename($file);
+        }
+    }
+}
+
+// Check if index.php includes bootstrap-app.php
+$patched = false;
+if (file_exists($index_file)) {
+    $index_content = file_get_contents($index_file);
+    if (!strstr($index_content, 'bootstrap-app.php')) {
+        // Backup the original file
+        if (!file_exists($index_file . '.bak')) {
+            copy($index_file, $index_file . '.bak');
+            $results['success'][] = "Created backup of index.php";
+        }
         
-        // Make sure cache directory exists
-        $cache_path = $bootstrap_path . '/cache';
-        if (!file_exists($cache_path)) {
-            if (@mkdir($cache_path, 0755, true)) {
-                $success_messages[] = "Created cache directory";
-            } else {
-                $error_messages[] = "Failed to create cache directory";
-            }
+        // Add the bootstrap-app.php include at the beginning of the file
+        $new_content = "<?php require_once __DIR__ . '/bootstrap-app.php'; ?>\n" . $index_content;
+        
+        if (file_put_contents($index_file, $new_content)) {
+            $results['success'][] = "Patched index.php to include bootstrap-app.php";
+            $patched = true;
+        } else {
+            $results['error'][] = "Failed to patch index.php";
         }
     } else {
-        $error_messages[] = "Warning: Bootstrap directory is not writable: $bootstrap_path";
+        $results['success'][] = "index.php already includes bootstrap-app.php";
+        $patched = true;
     }
+} else {
+    $results['error'][] = "index.php not found";
 }
 
-// Display the results
-$has_errors = !empty($error_messages);
-$title = $has_errors ? "Bootstrap Fix (with errors)" : "Bootstrap Fix (success)";
+// Display the results in a formatted page
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <title><?php echo $title; ?></title>
+    <title>Laravel Bootstrap Fixer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -194,10 +241,8 @@ $title = $has_errors ? "Bootstrap Fix (with errors)" : "Bootstrap Fix (success)"
             max-width: 800px;
             margin: 0 auto;
         }
-        h1 {
+        h1, h2, h3 {
             color: #336699;
-            border-bottom: 1px solid #eee;
-            padding-bottom: 10px;
         }
         .box {
             border: 1px solid #ddd;
@@ -205,22 +250,11 @@ $title = $has_errors ? "Bootstrap Fix (with errors)" : "Bootstrap Fix (success)"
             margin-bottom: 20px;
             border-radius: 4px;
         }
-        .success-box {
-            background-color: #f0fff0;
-            border-color: #d0e9c6;
+        .success {
+            color: green;
         }
-        .error-box {
-            background-color: #fff0f0;
-            border-color: #ebccd1;
-        }
-        .success-list {
-            color: #3c763d;
-        }
-        .error-list {
-            color: #a94442;
-        }
-        ul {
-            margin-top: 5px;
+        .error {
+            color: red;
         }
         pre {
             background: #f5f5f5;
@@ -228,90 +262,66 @@ $title = $has_errors ? "Bootstrap Fix (with errors)" : "Bootstrap Fix (success)"
             border-radius: 4px;
             overflow-x: auto;
         }
-        .actions {
-            margin-top: 20px;
-        }
-        .actions a {
-            display: inline-block;
-            margin-right: 10px;
-            padding: 8px 15px;
-            background: #336699;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-        }
-        .actions a:hover {
-            background: #264d73;
-        }
-        .warning {
-            color: #8a6d3b;
-            background-color: #fcf8e3;
-            border-color: #faebcc;
-            padding: 10px;
-            border-radius: 4px;
-            margin: 15px 0;
-        }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>Faveo Bootstrap Fixer</h1>
-        
-        <?php if ($is_production): ?>
-        <div class="warning">
-            <strong>Production Environment Detected!</strong> Fixes are being applied to the Railway production server.
-        </div>
-        <?php endif; ?>
-        
-        <?php if (!empty($success_messages)): ?>
-        <div class="box success-box">
-            <h2>Success Messages</h2>
-            <ul class="success-list">
-                <?php foreach ($success_messages as $message): ?>
-                <li><?php echo $message; ?></li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
-        <?php endif; ?>
-        
-        <?php if (!empty($error_messages)): ?>
-        <div class="box error-box">
-            <h2>Error Messages</h2>
-            <ul class="error-list">
-                <?php foreach ($error_messages as $message): ?>
-                <li><?php echo $message; ?></li>
-                <?php endforeach; ?>
-            </ul>
-        </div>
-        <?php endif; ?>
+        <h1>Laravel Bootstrap Fixer</h1>
+        <p>This tool fixes common issues with Laravel bootstrapping, particularly the "facade root has not been set" error.</p>
         
         <div class="box">
-            <h2>Next Steps</h2>
-            <p>Now that the bootstrap fixes have been applied, try the following:</p>
-            <ol>
-                <li>Try accessing the <a href="/public/">main application</a> to see if the facade root error is fixed.</li>
-                <li>If you still see the facade root error, try the <a href="<?php echo $alt_index_url; ?>">alternative index</a>.</li>
-                <li>If both options fail, check that all the diagnostic scripts exist and are accessible:</li>
-            </ol>
-            <div class="actions">
-                <a href="db-test.php">Database Test</a>
-                <a href="memory-only-fix.php">Memory Fix</a>
-                <a href="direct-migration.php">Direct Migration</a>
-                <a href="fix-permissions.php">Fix Permissions</a>
+            <h2>Diagnostic Results</h2>
+            
+            <?php if (count($results['success']) > 0): ?>
+                <h3 class="success">Successful Actions:</h3>
+                <ul>
+                    <?php foreach ($results['success'] as $message): ?>
+                        <li class="success"><?php echo htmlspecialchars($message); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+            
+            <?php if (count($results['error']) > 0): ?>
+                <h3 class="error">Errors:</h3>
+                <ul>
+                    <?php foreach ($results['error'] as $message): ?>
+                        <li class="error"><?php echo htmlspecialchars($message); ?></li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
+            
+            <div class="overall-status">
+                <?php if (count($results['error']) === 0): ?>
+                    <h3 class="success">✓ All fixes applied successfully.</h3>
+                <?php else: ?>
+                    <h3 class="error">✗ Some fixes failed. See errors above.</h3>
+                <?php endif; ?>
             </div>
         </div>
         
         <div class="box">
-            <h2>Technical Details</h2>
-            <p>The following fixes were attempted:</p>
-            <ol>
-                <li>Adding bootstrap-app.php include to index.php</li>
-                <li>Verifying critical scripts exist</li>
-                <li>Creating storage directories if missing</li>
-                <li>Fixing directory permissions</li>
-            </ol>
-            <p>If you continue to experience issues, use the diagnostic tools above to troubleshoot further.</p>
+            <h2>Next Steps</h2>
+            <ul>
+                <?php if ($patched): ?>
+                    <li>Try accessing the <a href="/public">main application</a> again.</li>
+                <?php else: ?>
+                    <li class="error">You need to manually add <code>require_once __DIR__ . '/bootstrap-app.php';</code> at the beginning of your index.php file.</li>
+                <?php endif; ?>
+                <li>If you're still seeing issues, try the <a href="diagnose-facade.php">diagnostic tool</a> for more detailed analysis.</li>
+                <li>You may need to <a href="install-dependencies.php">reinstall dependencies</a> if you're missing vendor files.</li>
+                <li>Check <a href="fix-permissions.php">file permissions</a> to ensure Laravel can write to important directories.</li>
+            </ul>
+        </div>
+        
+        <div class="box">
+            <h2>Navigation</h2>
+            <ul>
+                <li><a href="diagnose-facade.php">Facade Diagnostic Tool</a></li>
+                <li><a href="install-dependencies.php">Install Dependencies</a></li>
+                <li><a href="fix-permissions.php">Fix Permissions</a></li>
+                <li><a href="/public">Go to Application</a></li>
+            </ul>
         </div>
     </div>
 </body>
-</html> 
+</html>
