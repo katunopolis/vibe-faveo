@@ -11,6 +11,8 @@ vibe-faveo/
 ├── Dockerfile
 ├── Dockerfile.dev
 ├── bootstrap.sh
+├── bootstrap-patch.sh           # URL redirect fix patch for bootstrap.sh
+├── permanent-url-fix.sh         # Standalone URL redirect fix script
 ├── docker-compose.yml
 ├── railway.toml
 ├── project-structure.md
@@ -32,6 +34,7 @@ vibe-faveo/
     │   ├── repair-database.php
     │   ├── create-admin.php
     │   ├── fix-permissions.php
+    │   ├── url-redirect-fix.php             # Original PHP-based URL fix (fallback)
     │   └── [Other public files]
     └── [Other Faveo application files]
 ```
@@ -107,7 +110,15 @@ The application uses a bootstrap script (`bootstrap.sh`) that runs at container 
    - Set Apache ServerName to suppress warning messages
    - Adjust Apache to use the correct PORT as specified by Railway
    - Fall back to local configuration if not in Railway environment
-6. Start Apache server
+6. URL redirect fix:
+   - Detect the correct application URL
+   - Update database settings with the correct URL
+   - Update the .env file with the correct APP_URL
+   - Create a config override file with the correct URL
+   - Update bootstrap file to include URL overrides
+   - Patch index.php to include the bootstrap file
+   - Clear Laravel caches
+7. Start Apache server
 
 ### Known Issues
 The bootstrap script handles the following errors:
@@ -116,6 +127,7 @@ The bootstrap script handles the following errors:
 - Apache server name warning (resolved by setting ServerName directive)
 - Missing frontend asset files (now handled via webpack.mix.js improvements)
 - MySQL hostname resolution issues (resolved using external hostname and port)
+- URL redirect issues (application redirecting to port 8080)
 
 ### Frontend Asset Management
 The `webpack.mix.js` file includes the following improvements:
@@ -193,6 +205,51 @@ The application is configured for deployment on Railway with the `railway.toml` 
     - Test all possible connection methods
     - Use the first successful connection
     - Configure the application with working connection details
+
+## URL Redirect Fix
+The project includes a permanent solution for the URL redirect issues in Faveo, by integrating the fix directly into the bootstrap process.
+
+### Problem Background
+The Faveo application on Railway has been experiencing URL redirect issues where:
+1. The application redirects from `https://vibe-faveo-production.up.railway.app/` to `https://vibe-faveo-production.up.railway.app:8080/public/`
+2. This occurs because the URL in the database is set to "http://localhost" or includes port 8080
+3. Previous fix attempts used PHP scripts that faced permission issues:
+   - `Warning: file_put_contents(/var/www/html/.env): Failed to open stream: Permission denied`
+   - `Warning: file_put_contents(/var/www/html/public/db_bootstrap.php): Failed to open stream: Permission denied`
+
+### Implementation Options
+
+#### Option 1: Direct Modification of bootstrap.sh
+1. Edit the bootstrap.sh file in your repository
+2. Add the contents of bootstrap-patch.sh right before the `apache2-foreground` command (at the end of the file)
+3. Commit and push the changes to GitHub
+4. Railway will automatically rebuild and deploy
+
+#### Option 2: Separate Script Approach
+1. Use the permanent-url-fix.sh file in your repository
+2. Modify your Dockerfile to include:
+   ```dockerfile
+   COPY permanent-url-fix.sh /usr/local/bin/permanent-url-fix.sh
+   RUN chmod +x /usr/local/bin/permanent-url-fix.sh
+   ```
+3. Modify bootstrap.sh to include before the `apache2-foreground` line:
+   ```bash
+   # Fix URL redirects
+   source /usr/local/bin/permanent-url-fix.sh
+   fix_url_redirect
+   ```
+4. Commit and push the changes to GitHub
+5. Railway will automatically rebuild and deploy
+
+### Benefits
+- Runs with root privileges during container startup, avoiding permission issues
+- Applies automatically on every deployment without manual intervention
+- Makes changes once at startup, not repeatedly
+- Uses the same fix logic as the PHP script but at a more appropriate time
+- Eliminates the tedious deploy-and-check cycle for URL fixes
+
+### Fallback Method
+If this fix doesn't work for any reason, the original `url-redirect-fix.php` script will still be available as a fallback method.
 
 ## Facade Root Error Fix
 The application includes several specialized scripts to deal with the common Laravel "facade root has not been set" error:
@@ -310,6 +367,16 @@ The application includes several diagnostic PHP scripts to help troubleshoot con
 - Creates missing directories in the Laravel storage structure
 - Clears application caches
 
+### url-redirect-fix.php
+- Fixes URL redirection issues (fallback method)
+- Updates URL settings in database
+- Attempts to update .env file with correct APP_URL
+- Creates config override file for app.url
+- Clears Laravel caches
+- Provides comprehensive diagnostic information
+- Shows current URL configurations
+- Authentication protected
+
 ## Database Initialization
 The project includes a complete set of database initialization and maintenance tools:
 
@@ -413,226 +480,7 @@ The project includes a complete set of database initialization and maintenance t
     - Created `run-migrations-memory.php` that runs all setup steps without file access
     - Implemented Excel dependency stub generation to avoid package installation errors
     - Used $_ENV, putenv() and $GLOBALS for in-memory configuration instead of file writes
-    - If you encounter permission errors:
-      1. Visit `/public/memory-only-fix.php` to verify database connection
-      2. Visit `/public/run-migrations-memory.php` to run migrations in memory
-      3. If Excel dependency is causing issues, the memory script includes automatic stub generation
-
-16. Artisan Command Failures
-    - Issue: All artisan commands fail with error code 255 during migration
-    - Solution: Created `direct-migration.php` that bypasses Laravel completely
-    - This script creates essential database tables using direct SQL statements
-    - Sets up a minimal admin user and basic system configuration
-    - Uses PDO for direct database access without Laravel dependencies
-    - Requires the memory-only-fix.php to establish database connection
-    - Resolves common issues with required fields by providing default values
-    - Implements proper error handling with detailed SQL error reporting
-    - Automatically detects and uses the correct application URL
-    - If you encounter artisan command failures:
-      1. Visit `/public/direct-migration.php` to set up the database directly
-      2. After setup completes, continue with standard admin user creation
-      3. Change the default admin password immediately after login
-
-17. Database Field Constraint Issues
-    - Issue: User creation fails with errors like "Field 'ext' doesn't have a default value"
-    - Solution: Updated schema definitions in direct-migration.php to include:
-      - Default values for all required fields
-      - Modified field definitions for better compatibility
-      - Enhanced error reporting to show specific constraint violations
-    - Fields like ext, country_code, and phone_number now have appropriate defaults
-    - Improved error handling shows the exact SQL state and error codes
-    - If user creation fails when using direct-migration.php, check the error message for:
-      - Missing required fields
-      - Constraint violations
-      - Data type mismatches
-
-18. Laravel Facade Root Error
-    - Issue: "A facade root has not been set" error when accessing the application
-    - Solutions:
-      - Visit `/public/diagnose-facade.php` to run diagnostics and apply fixes
-      - Use `/public/fix-bootstrap.php` to patch index.php and fix permissions
-      - Ensure bootstrap-app.php is included at the beginning of index.php
-      - Try accessing the application through `/public/alt-index.php`
-      - Check that storage and bootstrap/cache directories have proper permissions
-      - Clear Laravel configuration cache if needed
-
-19. Composer Dependency Installation Failures
-    - Issue: Vendor files missing or incomplete after deployment causing "Class not found" errors
-    - Solution: 
-      - Enhanced bootstrap.sh with multiple installation attempts and fallback options
-      - Created install-dependencies.php for web-based dependency installation
-      - Added a flag mechanism to detect and report failed installations
-      - Integrated with diagnose-facade.php for automatic detection and guidance
-      - Clear error reporting and detailed logs of installation process
-    - The system now provides a self-healing mechanism for dependency issues:
-      1. If installation fails during bootstrap, a flag file is created
-      2. diagnose-facade.php detects this flag and shows a prominent message
-      3. User can easily run install-dependencies.php to fix the issues
-      4. After successful installation, the flag is automatically removed
-
-### Build Process Improvements
-1. Created a bootstrap script for runtime initialization
-2. Used direct file operations instead of artisan commands for cache clearing
-3. Added pre-generated application key to avoid key generation issues
-4. Created required storage directories explicitly
-5. Added Railway environment detection and configuration
-6. Improved webpack configuration to handle missing assets
-7. Added health check endpoint for monitoring
-8. Set Apache ServerName configuration to suppress warnings
-9. Updated railway.toml to use the bootstrap script as the start command
-10. Simplified Dockerfile by using a separate bootstrap.sh file instead of inline script creation
-11. Added smart database connection handling with auto-detection and failover
-12. Created diagnostic tools for troubleshooting connection issues
-13. Added comprehensive database initialization scripts for easy setup
-14. Implemented facade root initialization to prevent common Laravel errors
-15. Created alternative entry points for better error handling and diagnostics
-16. Added diagnostic tools for facade-related issues and bootstrapping problems
-17. Improved dependency installation with multiple fallback methods
-18. Added web-based dependency installer for easy troubleshooting
-19. Implemented automatic detection and reporting of dependency issues
-
-## Development Guidelines
-1. Always run `composer update` after modifying composer.json
-2. Ensure proper permissions on storage and cache directories
-3. Clear config and cache when encountering facade-related issues
-4. Use Docker Compose for local development environment
-5. Be aware of the ambiguous class resolution warnings (they're expected)
-6. Test your changes locally before deploying to Railway
-7. Use the provided database maintenance scripts when deploying to new environments
-8. If encountering facade root errors, use the diagnostic tools provided
-
-## Deployment
-The project is configured for deployment on Railway with the following considerations:
-- Environment variables must be properly set in the Railway dashboard:
-  - MySQL connection variables are automatically set when linking MySQL service
-  - APP_URL (for application URL)
-  - PORT (automatically provided by Railway)
-- The health check path is set to `/public/health.php` in railway.toml
-- The start command is set to `/usr/local/bin/bootstrap.sh` to ensure proper initialization
-- The bootstrap script automatically configures Apache to use the correct port
-- After deployment, follow these steps:
-  1. Visit `/public/diagnose-facade.php` to check the application status
-  2. If Laravel classes are missing, visit `/public/install-dependencies.php` to install dependencies
-  3. Visit `/public/run-migrations.php` to set up the database
-  4. Visit `/public/repair-database.php` to verify and fix database structure
-  5. Visit `/public/create-admin.php` to create an admin user
-  6. Visit `/public/fix-permissions.php` to fix any permission issues
-  7. Access Faveo at `/public` and log in with your admin credentials
-- If you encounter permission issues during setup, use the memory-only alternatives:
-  1. Visit `/public/memory-only-fix.php` to configure the database in memory
-  2. Visit `/public/run-migrations-memory.php` to run migrations without file access
-- If all artisan commands fail with error code 255, use the direct migration tool:
-  1. Visit `/public/direct-migration.php` to set up the database directly without Laravel
-  2. This script will create essential tables and an admin user automatically
-  3. It handles issues with required fields and provides detailed error reporting
-  4. The system settings will automatically use the correct application URL
-- If you encounter facade root errors:
-  1. Visit `/public/diagnose-facade.php` to diagnose and fix facade-related issues
-  2. Visit `/public/fix-bootstrap.php` to patch index.php and fix permissions
-  3. If the main application still doesn't work, try `/public/alt-index.php` as an alternative entry point
-- If you encounter persistent issues:
-  - Check Railway logs for specific error messages
-  - Visit `/public/db-connect-fix.php` to diagnose and fix database connection issues
-  - Visit `/public/db-test.php` to see detailed connection diagnostics
-
-## Testing
-- Unit tests should be run before deployment
-- Integration tests for critical paths
-- Environment-specific test configurations
-
-## Maintenance
-Regular maintenance tasks:
-1. Update dependencies
-2. Clear caches
-3. Check storage permissions
-4. Verify environment configurations
-5. Run `/public/repair-database.php` periodically to check database integrity
-
-## Security Considerations
-1. Environment variables protection
-2. File permissions management
-3. Dependency security updates
-4. API key management
-5. Change default admin credentials immediately after installation
-
-## Performance Optimization
-1. Composer autoload optimization
-2. Asset compilation
-3. Cache configuration
-4. Database optimization
-
-## Troubleshooting
-Common issues and solutions:
-1. Dependency conflicts: Run `composer clearcache` followed by `composer update`
-2. Permission issues: Check directory permissions for storage and bootstrap/cache
-3. Cache issues: Use direct file operations to clear Laravel cache files
-4. Environment issues: Verify .env configuration matches expected environment variables
-5. Docker build issues: Use `docker-compose down` followed by `docker-compose up --build`
-6. Laravel facade errors: 
-   - Visit `/public/diagnose-facade.php` to diagnose and fix facade root issues
-   - Make sure bootstrap-app.php is included at the beginning of index.php
-   - Try accessing the application through alt-index.php
-   - If issues persist, check storage and bootstrap/cache directory permissions
-7. Railway deployment issues:
-   - Verify health check is configured to use `/public/health.php` in railway.toml
-   - Ensure start command is set to `/usr/local/bin/bootstrap.sh` in railway.toml
-   - Verify database credentials are set correctly in Railway environment variables
-   - Check logs for any container startup errors
-   - Ensure the PORT environment variable is being respected by your container
-8. Apache server name warnings: These are now suppressed by setting ServerName directive in the bootstrap script
-9. Database connection issues in Railway:
-   - Ensure you have added a MySQL plugin in the Railway dashboard
-   - **CRITICAL**: You must explicitly link your MySQL service to your app service in Railway:
-     1. Go to your Railway dashboard
-     2. Select your app service
-     3. Go to the "Variables" tab
-     4. Click "Connect" or "Link Service" and select your MySQL service
-     5. This ensures the environment variables are shared between services
-   - If MySQL hostname resolution fails, use the diagnostic tools:
-     1. Visit /public/db-connect-fix.php to automatically fix connection issues
-     2. Visit /public/db-test.php to see detailed connection diagnostics
-   - If automatic fixes don't work, manually set the correct hostname/port:
-     - Use yamabiko.proxy.rlwy.net (or your specific external hostname) instead of mysql.railway.internal
-     - Use the external port (52501 or your specific port) instead of the default 3306
-   - The updated bootstrap.sh will automatically try both internal and external connections
-10. Dockerfile build errors:
-    - If you see error code 127 during the build process, it might be related to the bootstrap script
-    - Use the external bootstrap.sh file approach instead of inline script creation
-
-11. Environment File Issues:
-    - Issue: The .env file might not be properly updated using sed commands
-    - Solution: Use direct file writing with cat heredoc syntax instead of sed replacements
-    - Use db-test.php to diagnose .env file loading issues and check file permissions
-
-12. Railway MySQL Connection Issues:
-    - Issue: mysql.railway.internal hostname not resolving in Railway environment
-    - Solutions:
-      - Ensure MySQL plugin is properly linked to your app service
-      - Use the external hostname and port from MYSQL_PUBLIC_URL environment variable
-      - The updated bootstrap.sh now automatically tries both internal and external connections
-      - Visit /public/db-connect-fix.php to automatically fix connection issues
-
-13. Database Initialization Issues:
-    - Issue: Empty database after deployment
-    - Solution: Use the provided scripts in order: run-migrations.php, repair-database.php, create-admin.php, fix-permissions.php
-    - If scripts fail with permission errors, run `chmod 755 /var/www/html/public/*.php` in the Railway shell
-
-14. PHP Version Compatibility:
-    - Issue: Syntax errors due to newer PHP features used in scripts
-    - Solution: Added backward compatible `db-fixed.php` file that works on older PHP versions
-    - Replaced nullish coalescing operator (??) with traditional isset() checks
-    - Modified heredoc syntax for PHP 5.x compatibility
-    - Used array() syntax instead of [] shorthand for older PHP compatibility
-    - Created simplified bootstrapping procedure with older version support
-
-15. File Permission Issues in Restricted Environments
-    - Issue: Unable to write configuration files in some hosting environments
-    - Solution: Created memory-only versions of key configuration scripts
-    - Added `memory-only-fix.php` that configures database without writing files
-    - Created `run-migrations-memory.php` that runs all setup steps without file access
-    - Implemented Excel dependency stub generation to avoid package installation errors
-    - Used $_ENV, putenv() and $GLOBALS for in-memory configuration instead of file writes
-    - If you encounter permission errors:
+    - If you encounter permission issues:
       1. Visit `/public/memory-only-fix.php` to verify database connection
       2. Visit `/public/run-migrations-memory.php` to run migrations in memory
       3. If Excel dependency is causing issues, the memory script includes automatic stub generation
@@ -683,6 +531,15 @@ Common issues and solutions:
       - For command line access: `composer install --no-dev --optimize-autoloader`
       - Check for the `needs_composer_install` flag in public directory, which indicates bootstrap installation failure
       - If dependency installation fails repeatedly, check for memory limits or disk space issues
+
+20. URL Redirect Issues
+    - Issue: Application redirects to port 8080 or localhost
+    - Solution:
+      - Integrated URL fix directly into bootstrap.sh process
+      - Detects and applies correct URL during container startup
+      - Runs with root privileges to avoid permission issues
+      - Updates database, config files, and environment variables
+      - Provides fallback PHP script (url-redirect-fix.php) for manual fixes
 
 ### Memory-Only Fix Solution
 The project includes a special set of memory-only tools to handle deployment environments with restricted file permissions:
