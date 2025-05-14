@@ -68,6 +68,39 @@ The `bootstrap-complete.sh` script has been updated to:
 3. Create a simple URL fix utility in the utils directory
 4. Create the utilities index page for easy access
 
+## Redundant Files Removed
+
+After successfully consolidating functionality into the new structure, the following redundant files have been removed from the `/faveo/public` directory:
+
+### URL Fixes
+- `fix-url.php`
+- `url-redirect-fix.php`
+
+### Bootstrap Fixes
+- `fix-bootstrap.php`
+- `bootstrap-app.php`
+- `fix-permissions.php`
+
+### Database Utilities
+- `db-test.php`
+- `db-fixed.php`
+- `db-connect-fix.php`
+- `db-direct-config.php`
+- `direct-db-setup.php`
+- `create-db.php`
+- `run-migrations.php`
+
+### Admin Utilities
+- `reset-password.php`
+- `create-admin.php`
+
+### Diagnostics
+- `diagnose-facade.php`
+- `env-debug.php`
+- `mysql-test.php`
+
+A cleanup script (`cleanup-redundant.php`) was created to safely remove these files while logging the removal process.
+
 ## Benefits of the New Structure
 
 1. **Better Organization** - Scripts are now organized by function, making them easier to find
@@ -75,6 +108,7 @@ The `bootstrap-complete.sh` script has been updated to:
 3. **Consistent Interface** - All utilities now have a consistent authentication mechanism and UI
 4. **Centralized Access** - The utilities index page provides a dashboard for easy access to all tools
 5. **Simplified Maintenance** - Each utility has a single responsibility and is easier to maintain
+6. **Reduced Clutter** - Removal of redundant files makes the directory structure cleaner
 
 ## Deployment Impact
 
@@ -87,5 +121,4 @@ The changes are fully backward compatible with the existing deployment:
 ## Next Steps
 
 1. Update documentation to reference the new utility structure
-2. Consider removing the old scripts once the new structure is confirmed working
-3. Add additional utilities as needed in their appropriate directories 
+2. Add additional utilities as needed in their appropriate directories 
