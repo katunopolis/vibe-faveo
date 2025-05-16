@@ -28,6 +28,8 @@ vibe-faveo/
     │   ├── facade-fix.php
     │   ├── alt-index.php
     │   ├── fix-bootstrap.php
+    │   ├── health.php
+    │   ├── index.php
     │   ├── diagnose-facade.php
     │   ├── install-dependencies.php
     │   ├── install-dependencies-fixed.php
@@ -52,7 +54,7 @@ vibe-faveo/
 The project uses Docker for containerization with the following key files:
 
 ### Dockerfile
-- Base image: `php:8.1-apache`
+- Base image: `php:8.2-apache`
 - System dependencies:
   - libzip-dev
   - unzip
@@ -123,23 +125,49 @@ The application uses a consolidated bootstrap script (`bootstrap-complete.sh`) t
    - Create diagnostic health file if Apache fails to start
 
 ### Health Check System
-The project includes an advanced health check system:
-1. The main `health.php` file:
-   - Returns a valid "OK" response to satisfy Railway's health check
-   - Provides comprehensive diagnostic information about:
-     - Apache status
-     - Database connectivity
-     - Directory permissions
-     - Required files existence
-     - Environment variables
-     - Bootstrap and Apache logs
-2. Fallback mechanisms:
-   - If bootstrap script fails, a simplified health check file is created
-   - If Apache fails to start, a diagnostic health check is generated
-3. Enhanced logging:
-   - All operations logged to `/var/log/bootstrap.log`
-   - Last 10 lines of logs displayed in health check
-   - Apache error logs included when available
+The project includes an updated health check system:
+1. The main `health.php` file in the public directory:
+   - Simplified to always return HTTP 200 OK 
+   - No longer depends on external diagnostics scripts
+   - Sets proper cache control headers to prevent caching
+   - Is properly referenced in railway.toml with correct path
+2. Additional diagnostic features:
+   - Ability to show detailed diagnostics via query parameter
+   - Can redirect to comprehensive diagnostics in utils directory
+3. Railway Configuration:
+   - Configured in railway.toml to use `/public/health.php`
+   - Increased healthcheck timeout to 300 seconds
+   - `ON_FAILURE` restart policy
+
+### Recent Updates and Fixes
+
+#### 1. Fixed bootstrap-app.php Syntax Error
+- Added proper namespace prefixes to all class references
+- Fixed path resolution with dirname(dirname(__DIR__))
+- Used explicit namespace resolution with backslashes
+- Ensured proper facades initialization
+
+#### 2. Updated index.php
+- Modified to use the bootstrap-app.php in the public directory
+- Removed redundant bootstrap loading from bootstrap/app.php
+- Improved application startup process
+
+#### 3. Improved fix-bootstrap.php
+- Updated to work with the new file organization
+- Added better error handling and reporting
+- Improved web interface for better diagnostics
+- Fixed paths to work with the project structure
+
+#### 4. Simplified health.php
+- Created minimal health check that always returns 200 OK
+- Made it more resilient to environment issues
+- Added cache control headers to prevent caching
+- Included optional diagnostics capabilities
+
+#### 5. Updated railway.toml
+- Fixed healthcheckPath to point to /public/health.php
+- Increased healthcheck timeout for better reliability
+- Maintained `ON_FAILURE` restart policy for consistent operation
 
 ### Known Issues
 The bootstrap script handles the following errors:

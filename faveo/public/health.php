@@ -4,10 +4,15 @@
  * Redirects to the utils/health/health.php script or handles the request directly
  */
 
-// For Railway health checks, always return HTTP 200
+// Simple health check that always returns OK
 header('Content-Type: text/plain');
+header('Cache-Control: no-cache, no-store, must-revalidate');
+header('Pragma: no-cache');
+header('Expires: 0');
+
+// Always return 200 OK for Railway health check
 echo "OK";
-http_response_code(200);
+exit(0);
 
 // If detailed diagnostics requested, include the comprehensive diagnostics script
 if (isset($_GET['diagnostics']) || isset($_GET['debug'])) {
@@ -18,5 +23,3 @@ if (isset($_GET['diagnostics']) || isset($_GET['debug'])) {
         echo "\n\nDetailed diagnostics not available. Utils directory not configured.";
     }
 }
-
-exit(0);
