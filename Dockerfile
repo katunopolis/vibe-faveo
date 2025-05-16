@@ -27,23 +27,22 @@ WORKDIR /var/www/html
 # Copy application files
 COPY faveo /var/www/html/
 
-# Copy health check file
+# Copy configuration files
+COPY bootstrap.sh /usr/local/bin/bootstrap.sh
 COPY health.php /var/www/html/public/health.php
 
-# Copy bootstrap file
-COPY bootstrap-complete.sh /usr/local/bin/bootstrap.sh
-RUN chmod +x /usr/local/bin/bootstrap.sh
-
-# Set proper permissions
-RUN chown -R www-data:www-data /var/www/html \
+# Set permissions
+RUN chmod +x /usr/local/bin/bootstrap.sh \
+    && chown -R www-data:www-data /var/www/html \
     && chmod -R 775 /var/www/html/storage \
     && chmod -R 775 /var/www/html/bootstrap/cache
 
-# Apache config
-COPY 000-default.conf /etc/apache2/sites-available/000-default.conf
+# Configure Apache to listen on port 8080
+RUN sed -i 's/Listen 80/Listen 8080/g' /etc/apache2/ports.conf \
+    && sed -i 's/<VirtualHost \*:80>/<VirtualHost \*:8080>/g' /etc/apache2/sites-available/000-default.conf
+
+# Expose port 8080
+EXPOSE 8080
 
 # Set entrypoint to bootstrap.sh
-ENTRYPOINT ["/usr/local/bin/bootstrap.sh"]
-
-# Expose port 80
-EXPOSE 80 
+ENTRYPOINT ["/usr/local/bin/bootstrap.sh"] 
